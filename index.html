@@ -28,7 +28,14 @@
   }
   .wrap { max-width: 1000px; margin: 0 auto; }
   h1 { font-size: 20px; font-weight: 600; margin: 0 0 2px; }
-  .sub { color: var(--dim); font-size: 13px; margin-bottom: 16px; }
+  .sub { color: var(--dim); font-size: 13px; }
+  header.top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+  .navlink {
+    flex: none; font-size: 14px; color: #fff; background: var(--accent); border: 1px solid var(--accent);
+    border-radius: 8px; min-height: 40px; padding: 8px 14px; text-decoration: none; display: inline-flex; align-items: center;
+  }
+  .navlink:hover { background: #3f7ae0; }
+  .navlink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   button, select {
     font: inherit;
@@ -173,8 +180,13 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Data HPP</h1>
-  <div class="sub">Catat modal barang. Tersimpan otomatis di browser ini.</div>
+  <header class="top">
+    <div>
+      <h1>Data HPP</h1>
+      <div class="sub">Catat modal barang. Tersimpan otomatis di browser ini.</div>
+    </div>
+    <a class="navlink" href="dashboard.html">Dashboard</a>
+  </header>
 
   <div id="warn" class="warn" hidden>Data gagal disimpan di browser ini (mungkin mode private atau penyimpanan penuh). Gunakan Export CSV atau Backup supaya data tidak hilang.</div>
 
