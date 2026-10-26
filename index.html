@@ -2,8 +2,9 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DATA HPP - Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Data HPP</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -11,41 +12,41 @@
     --panel-alt: #1e222b;
     --border: #2a2f3a;
     --text: #e8e9ec;
-    --text-dim: #9aa0ab;
+    --dim: #9aa0ab;
     --accent: #4f8cff;
-    --accent-dim: #2f4d8f;
     --green: #35c98f;
     --red: #ff5d6c;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
   body {
-    margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
-    padding: 24px;
+    padding: 20px 16px calc(16px + env(safe-area-inset-bottom));
+    line-height: 1.4;
   }
   .wrap { max-width: 1000px; margin: 0 auto; }
-  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
-  .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 2px; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 16px; }
 
-  .toolbar {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
-  }
-  button {
+  button, select {
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
     background: var(--panel-alt);
     border: 1px solid var(--border);
-    color: var(--text);
-    padding: 9px 14px;
     border-radius: 8px;
-    font-size: 13px;
-    cursor: pointer;
+    min-height: 40px;
+    padding: 8px 14px;
   }
+  button { cursor: pointer; }
   button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  button:focus-visible, select:focus-visible, summary:focus-visible, input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button.primary:hover { background: #3f7ae0; }
   button.danger { color: var(--red); }
 
@@ -55,258 +56,540 @@
     border-radius: 12px;
     overflow: hidden;
   }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  thead th {
-    text-align: left;
-    padding: 10px 12px;
+
+  /* ---- File picker ---- */
+  .filebar { padding: 12px; margin-bottom: 12px; }
+  .filebar .pick { display: flex; gap: 8px; align-items: center; }
+  .filebar label { font-size: 13px; color: var(--dim); flex: none; }
+  .filebar select { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
+  .meta { font-size: 12px; color: var(--dim); margin: 8px 0 10px; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-start; }
+  details.more { flex: 1 1 100%; }
+  details.more summary {
+    cursor: pointer; color: var(--dim); font-size: 13px; padding: 6px 2px; list-style: none;
+  }
+  details.more summary::-webkit-details-marker { display: none; }
+  details.more summary::before { content: "+ "; }
+  details.more[open] summary::before { content: "– "; }
+  details.more .btns { margin-top: 6px; }
+
+  .warn {
+    background: #3a1f24; border: 1px solid var(--red); color: #ffd3d8;
+    border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px;
+  }
+  .warn[hidden] { display: none; }
+
+  /* ---- Rows ---- */
+  .head, .row {
+    display: grid;
+    grid-template-columns: minmax(0,2.4fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.5fr) 40px;
+    gap: 6px;
+    align-items: center;
+    padding: 6px 10px;
+  }
+  .head {
     background: var(--panel-alt);
-    color: var(--text-dim);
-    font-weight: 600;
+    color: var(--dim);
     font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    padding: 10px;
   }
-  tbody td {
-    padding: 6px 8px;
-    border-bottom: 1px solid var(--border);
-  }
-  tbody tr:last-child td { border-bottom: none; }
-  input {
+  .head .r { text-align: right; }
+  .row { border-top: 1px solid var(--border); }
+  .lbl { display: none; }
+  .cell input {
     width: 100%;
     background: transparent;
     border: 1px solid transparent;
     color: var(--text);
     padding: 8px;
     border-radius: 6px;
+    font: inherit;
     font-size: 14px;
   }
-  input:focus {
-    outline: none;
-    border-color: var(--accent);
-    background: var(--panel-alt);
-  }
-  input[type="number"] { text-align: right; }
-  .col-total { text-align: right; color: var(--green); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .col-del { width: 36px; text-align: center; }
-  .col-del button { padding: 4px 8px; }
+  .cell input:focus { background: var(--panel-alt); border-color: var(--accent); outline: none; }
+  .cell input::placeholder { color: #5b6270; }
+  .c-banyak input, .c-harga input { text-align: right; }
+  .c-total { text-align: right; color: var(--green); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 4px; }
+  .c-del button { width: 36px; min-height: 36px; padding: 0; color: var(--red); }
 
-  tfoot td {
-    padding: 12px;
-    font-weight: 700;
-    background: var(--panel-alt);
+  .addrow {
+    display: block; width: 100%; border: 0; border-top: 1px dashed var(--border);
+    border-radius: 0; background: transparent; color: var(--accent); min-height: 48px;
   }
-  tfoot .col-total { color: var(--green); font-size: 16px; }
+  .addrow:hover { background: var(--panel-alt); }
 
-  .empty {
-    padding: 40px;
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 13px;
+  .grand {
+    position: sticky; bottom: 0; margin-top: 12px;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    background: var(--panel-alt); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    font-weight: 600;
   }
+  .grand strong { color: var(--green); font-size: 20px; font-variant-numeric: tabular-nums; }
 
-  .footer-note {
-    margin-top: 14px;
-    color: var(--text-dim);
-    font-size: 12px;
+  .note { margin-top: 14px; color: var(--dim); font-size: 12px; }
+
+  /* ---- Phone layout ---- */
+  @media (max-width: 640px) {
+    body { padding: 14px 12px calc(12px + env(safe-area-inset-bottom)); }
+    .filebar .pick { flex-wrap: wrap; }
+    .filebar .pick label { flex: 1 1 100%; }
+    .filebar .btns button { flex: 1 1 calc(50% - 4px); }
+    .toolbar > button { flex: 1 1 calc(50% - 4px); }
+    .toolbar > button.primary { flex: 1 1 100%; }
+    .btns button { flex: 1 1 calc(50% - 4px); }
+
+    .head { display: none; }
+    .row {
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      grid-template-areas:
+        "nama nama nama"
+        "banyak satuan harga"
+        "total total del";
+      gap: 8px;
+      padding: 14px 12px;
+    }
+    .c-nama { grid-area: nama; }
+    .c-banyak { grid-area: banyak; }
+    .c-satuan { grid-area: satuan; }
+    .c-harga { grid-area: harga; }
+    .c-total { grid-area: total; display: flex; justify-content: space-between; align-items: center; font-size: 17px; padding: 0 4px; }
+    .c-del { grid-area: del; }
+    .c-del button { width: 100%; }
+    .lbl { display: block; font-size: 12px; color: var(--dim); margin-bottom: 3px; }
+    .c-total .lbl { margin: 0; }
+    .cell input {
+      background: var(--panel-alt);
+      border-color: var(--border);
+      font-size: 16px;      /* cegah zoom otomatis di iPhone */
+      padding: 11px 10px;
+    }
+    .c-banyak input, .c-harga input { text-align: left; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>DATA HPP</h1>
-  <div class="sub">Harga Pokok Penjualan / cost tracker — tersimpan otomatis di browser ini</div>
+  <h1>Data HPP</h1>
+  <div class="sub">Catat modal barang. Tersimpan otomatis di browser ini.</div>
+
+  <div id="warn" class="warn" hidden>Data gagal disimpan di browser ini (mungkin mode private atau penyimpanan penuh). Gunakan Export CSV atau Backup supaya data tidak hilang.</div>
+
+  <div class="card filebar">
+    <div class="pick">
+      <label for="fileSelect">File aktif</label>
+      <select id="fileSelect"></select>
+    </div>
+    <div class="meta" id="meta"></div>
+    <div class="btns">
+      <button id="btnNew">File baru</button>
+      <button id="btnRename">Ubah nama</button>
+      <button id="btnDup">Duplikat</button>
+      <button id="btnDel" class="danger">Hapus file</button>
+    </div>
+  </div>
 
   <div class="toolbar">
-    <button class="primary" onclick="addRow()">+ Tambah Barang</button>
-    <button onclick="exportCSV()">Export CSV</button>
-    <button onclick="document.getElementById('importFile').click()">Import CSV</button>
-    <input type="file" id="importFile" accept=".csv" style="display:none" onchange="importCSV(event)">
-    <button class="danger" onclick="clearAll()">Hapus Semua</button>
+    <button id="btnAdd" class="primary">+ Tambah barang</button>
+    <button id="btnExport">Export CSV</button>
+    <button id="btnImport">Import CSV</button>
+    <details class="more">
+      <summary>Lainnya</summary>
+      <div class="btns">
+        <button id="btnBackup">Backup semua file</button>
+        <button id="btnRestore">Restore backup</button>
+        <button id="btnClear" class="danger">Kosongkan file ini</button>
+      </div>
+    </details>
   </div>
+  <input type="file" id="csvFile" accept=".csv,text/csv" hidden>
+  <input type="file" id="jsonFile" accept=".json,application/json" hidden>
 
   <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th style="width:34%">Nama Barang</th>
-          <th style="width:14%">Banyak</th>
-          <th style="width:14%">Satuan</th>
-          <th style="width:18%">Harga</th>
-          <th style="width:18%">Total</th>
-          <th class="col-del"></th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-      <tfoot>
-        <tr>
-          <td colspan="4">Grand Total</td>
-          <td class="col-total" id="grandTotal">Rp 0</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
+    <div class="head">
+      <div>Nama barang</div>
+      <div class="r">Banyak</div>
+      <div>Satuan</div>
+      <div class="r">Harga</div>
+      <div class="r">Total</div>
+      <div></div>
+    </div>
+    <div id="rows"></div>
+    <button class="addrow" id="btnAdd2">+ Tambah barang</button>
   </div>
 
-  <div class="footer-note">Data disimpan lokal (localStorage) di browser ini. Export CSV kalau mau backup atau pindah device.</div>
+  <div class="grand">
+    <span>Grand total</span>
+    <strong id="grand">Rp 0</strong>
+  </div>
+
+  <div class="note">Data disimpan di browser (localStorage) per perangkat. Untuk pindah HP atau komputer, pakai Backup lalu Restore, atau Export CSV.</div>
 </div>
 
 <script>
-const STORAGE_KEY = 'hpp_tracker_data_v1';
-let data = [];
+(function () {
+  const KEY = 'hpp_tracker_v2';
+  const OLD_KEY = 'hpp_tracker_data_v1';
+  const $ = (id) => document.getElementById(id);
 
-function load() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    data = raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    data = [];
+  let store = { files: [], currentId: null };
+
+  /* ---------- helpers ---------- */
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const blankRow = () => ({ nama: '', banyak: '', satuan: '', harga: '' });
+  const num = (v) => parseFloat(v) || 0;
+  const rowTotal = (r) => num(r.banyak) * num(r.harga);
+  const rupiah = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
+  const cur = () => store.files.find((f) => f.id === store.currentId);
+
+  function normRow(r) {
+    r = r || {};
+    const s = (v) => (v === undefined || v === null || v === 0 ? '' : String(v));
+    return { nama: s(r.nama), banyak: s(r.banyak), satuan: s(r.satuan), harga: s(r.harga) };
   }
-  if (data.length === 0) addRow(false);
-  render();
-}
-
-function save() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.error('Gagal simpan:', e);
+  function makeFile(name, rows) {
+    const clean = (rows || []).map(normRow);
+    return { id: uid(), name: name || 'HPP', rows: clean.length ? clean : [blankRow()], updated: Date.now() };
   }
-}
 
-function addRow(doSave = true) {
-  data.push({ nama: '', banyak: '', satuan: '', harga: 0 });
-  render();
-  if (doSave) save();
-}
+  /* ---------- storage ---------- */
+  function saveStore() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(store));
+      $('warn').hidden = true;
+    } catch (e) {
+      $('warn').hidden = false;
+    }
+  }
+  function loadStore() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.files)) store = parsed;
+      }
+    } catch (e) { /* abaikan */ }
 
-function removeRow(idx) {
-  data.splice(idx, 1);
-  render();
-  save();
-}
-
-function updateField(idx, field, value) {
-  data[idx][field] = field === 'harga' ? (parseFloat(value) || 0) : value;
-  render();
-  save();
-}
-
-function formatRupiah(n) {
-  return 'Rp ' + Math.round(n).toLocaleString('id-ID');
-}
-
-function render() {
-  const tbody = document.getElementById('rows');
-  tbody.innerHTML = '';
-
-  if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">Belum ada barang. Klik "+ Tambah Barang" untuk mulai.</td></tr>';
-  } else {
-    data.forEach((row, idx) => {
-      const banyakNum = parseFloat(row.banyak) || 0;
-      const total = banyakNum * (row.harga || 0);
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><input type="text" value="${escapeAttr(row.nama)}" placeholder="Nama barang" oninput="updateField(${idx},'nama',this.value)"></td>
-        <td><input type="number" value="${escapeAttr(row.banyak)}" placeholder="0" oninput="updateField(${idx},'banyak',this.value)"></td>
-        <td><input type="text" value="${escapeAttr(row.satuan)}" placeholder="pcs/kg/m" oninput="updateField(${idx},'satuan',this.value)"></td>
-        <td><input type="number" value="${row.harga || ''}" placeholder="0" oninput="updateField(${idx},'harga',this.value)"></td>
-        <td class="col-total">${formatRupiah(total)}</td>
-        <td class="col-del"><button class="danger" onclick="removeRow(${idx})" title="Hapus">✕</button></td>
-      `;
-      tbody.appendChild(tr);
+    if (!store.files.length) {
+      // migrasi dari versi lama (satu daftar saja)
+      let oldRows = [];
+      try {
+        const old = localStorage.getItem(OLD_KEY);
+        if (old) oldRows = JSON.parse(old) || [];
+      } catch (e) { /* abaikan */ }
+      const hasOld = oldRows.some((r) => r && (r.nama || r.banyak || r.harga));
+      const f = makeFile(hasOld ? 'HPP (data lama)' : 'HPP 1', oldRows);
+      store = { files: [f], currentId: f.id };
+      saveStore();
+    }
+    store.files.forEach((f) => {
+      f.rows = (f.rows || []).map(normRow);
+      if (!f.rows.length) f.rows = [blankRow()];
+      if (!f.updated) f.updated = Date.now();
     });
+    if (!cur()) store.currentId = store.files[0].id;
+  }
+  function touch() {
+    cur().updated = Date.now();
+    saveStore();
+    updateMeta();
   }
 
-  const grand = data.reduce((sum, row) => sum + ((parseFloat(row.banyak) || 0) * (row.harga || 0)), 0);
-  document.getElementById('grandTotal').textContent = formatRupiah(grand);
-}
-
-function escapeAttr(v) {
-  return String(v ?? '').replace(/"/g, '&quot;');
-}
-
-function clearAll() {
-  if (confirm('Hapus semua data HPP? Tindakan ini tidak bisa dibatalkan.')) {
-    data = [];
-    addRow(false);
-    save();
+  /* ---------- render ---------- */
+  function updateMeta() {
+    const f = cur();
+    const t = new Date(f.updated).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+    $('meta').textContent = f.rows.length + ' baris, terakhir diubah ' + t;
   }
-}
+  function updateGrand() {
+    const sum = cur().rows.reduce((s, r) => s + rowTotal(r), 0);
+    $('grand').textContent = rupiah(sum);
+  }
+  function renderFileSelect() {
+    const sel = $('fileSelect');
+    sel.innerHTML = '';
+    store.files.forEach((f) => {
+      const o = document.createElement('option');
+      o.value = f.id;
+      o.textContent = f.name;
+      sel.appendChild(o);
+    });
+    sel.value = store.currentId;
+  }
 
-function exportCSV() {
-  const header = 'Nama Barang,Banyak,Satuan,Harga,Total\n';
-  const rows = data.map(r => {
-    const banyakNum = parseFloat(r.banyak) || 0;
-    const total = banyakNum * (r.harga || 0);
-    return [csvEscape(r.nama), csvEscape(r.banyak), csvEscape(r.satuan), r.harga || 0, total].join(',');
-  }).join('\n');
-  const csv = header + rows;
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `data-hpp-${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function csvEscape(v) {
-  const s = String(v ?? '');
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function importCSV(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const text = e.target.result;
-    const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
-    const startIdx = /nama barang/i.test(lines[0]) ? 1 : 0;
-    const imported = [];
-    for (let i = startIdx; i < lines.length; i++) {
-      const cols = parseCSVLine(lines[i]);
-      if (cols.length < 4) continue;
-      imported.push({
-        nama: cols[0] || '',
-        banyak: cols[1] || '',
-        satuan: cols[2] || '',
-        harga: parseFloat(cols[3]) || 0
-      });
+  function field(row, key, label, type, placeholder, onChange) {
+    const cell = document.createElement('div');
+    cell.className = 'cell c-' + key;
+    const l = document.createElement('span');
+    l.className = 'lbl';
+    l.textContent = label;
+    const inp = document.createElement('input');
+    inp.type = type;
+    inp.placeholder = placeholder;
+    inp.value = row[key];
+    inp.autocomplete = 'off';
+    inp.setAttribute('aria-label', label);
+    if (type === 'number') {
+      inp.inputMode = 'decimal';
+      inp.step = 'any';
+      inp.min = '0';
     }
-    if (imported.length > 0) {
-      data = imported;
-      render();
-      save();
-    }
-    event.target.value = '';
-  };
-  reader.readAsText(file);
-}
+    // hanya update data + total, TIDAK membangun ulang baris => fokus tidak hilang
+    inp.addEventListener('input', () => {
+      row[key] = inp.value;
+      onChange();
+    });
+    cell.append(l, inp);
+    return cell;
+  }
 
-function parseCSVLine(line) {
-  const result = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (inQuotes) {
-      if (c === '"' && line[i+1] === '"') { cur += '"'; i++; }
-      else if (c === '"') { inQuotes = false; }
-      else { cur += c; }
-    } else {
-      if (c === '"') inQuotes = true;
-      else if (c === ',') { result.push(cur); cur = ''; }
+  function buildRow(row) {
+    const el = document.createElement('div');
+    el.className = 'row';
+
+    const totalCell = document.createElement('div');
+    totalCell.className = 'cell c-total';
+    const totalLbl = document.createElement('span');
+    totalLbl.className = 'lbl';
+    totalLbl.textContent = 'Total';
+    const totalVal = document.createElement('span');
+    totalCell.append(totalLbl, totalVal);
+
+    const refresh = () => {
+      totalVal.textContent = rupiah(rowTotal(row));
+      updateGrand();
+      touch();
+    };
+
+    const delCell = document.createElement('div');
+    delCell.className = 'cell c-del';
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '✕';
+    del.title = 'Hapus baris';
+    del.setAttribute('aria-label', 'Hapus baris');
+    del.addEventListener('click', () => {
+      const f = cur();
+      f.rows.splice(f.rows.indexOf(row), 1);
+      if (!f.rows.length) f.rows.push(blankRow());
+      touch();
+      renderRows();
+    });
+    delCell.appendChild(del);
+
+    el.append(
+      field(row, 'nama', 'Nama barang', 'text', 'Nama barang', refresh),
+      field(row, 'banyak', 'Banyak', 'number', '0', refresh),
+      field(row, 'satuan', 'Satuan', 'text', 'pcs / kg / m', refresh),
+      field(row, 'harga', 'Harga', 'number', '0', refresh),
+      totalCell,
+      delCell
+    );
+    totalVal.textContent = rupiah(rowTotal(row));
+    return el;
+  }
+
+  function renderRows(focusLast) {
+    const box = $('rows');
+    box.innerHTML = '';
+    cur().rows.forEach((r) => box.appendChild(buildRow(r)));
+    updateGrand();
+    updateMeta();
+    if (focusLast) {
+      const last = box.lastElementChild;
+      const inp = last && last.querySelector('input');
+      if (inp) {
+        inp.focus();
+        inp.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }
+  }
+  function renderAll() {
+    renderFileSelect();
+    renderRows();
+  }
+
+  /* ---------- aksi baris ---------- */
+  function addRow() {
+    cur().rows.push(blankRow());
+    touch();
+    renderRows(true);
+  }
+  function clearRows() {
+    if (!confirm('Kosongkan semua barang di file "' + cur().name + '"?')) return;
+    cur().rows = [blankRow()];
+    touch();
+    renderRows();
+  }
+
+  /* ---------- aksi file ---------- */
+  function switchFile(id) {
+    store.currentId = id;
+    saveStore();
+    renderAll();
+  }
+  function newFile() {
+    const name = prompt('Nama file baru:', 'HPP ' + (store.files.length + 1));
+    if (name === null || !name.trim()) return;
+    const f = makeFile(name.trim(), []);
+    store.files.push(f);
+    store.currentId = f.id;
+    saveStore();
+    renderAll();
+  }
+  function renameFile() {
+    const name = prompt('Ubah nama file:', cur().name);
+    if (name === null || !name.trim()) return;
+    cur().name = name.trim();
+    touch();
+    renderFileSelect();
+  }
+  function dupFile() {
+    const src = cur();
+    const f = makeFile(src.name + ' (salinan)', JSON.parse(JSON.stringify(src.rows)));
+    store.files.push(f);
+    store.currentId = f.id;
+    saveStore();
+    renderAll();
+  }
+  function deleteFile() {
+    if (!confirm('Hapus file "' + cur().name + '"? Tidak bisa dibatalkan.')) return;
+    store.files = store.files.filter((f) => f.id !== store.currentId);
+    if (!store.files.length) store.files.push(makeFile('HPP 1', []));
+    store.currentId = store.files[0].id;
+    saveStore();
+    renderAll();
+  }
+
+  /* ---------- CSV ---------- */
+  function csvEscape(v) {
+    const s = String(v === undefined || v === null ? '' : v);
+    return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function download(name, text, mime) {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const safeName = (s) => s.replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '') || 'hpp';
+
+  function exportCSV() {
+    const f = cur();
+    const lines = ['Nama Barang,Banyak,Satuan,Harga,Total'];
+    f.rows.forEach((r) => {
+      lines.push([csvEscape(r.nama), csvEscape(r.banyak), csvEscape(r.satuan), csvEscape(r.harga), rowTotal(r)].join(','));
+    });
+    download(safeName(f.name) + '.csv', '\uFEFF' + lines.join('\n'), 'text/csv;charset=utf-8');
+  }
+  function parseLine(line, delim) {
+    const out = [];
+    let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) {
+        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (c === '"') q = false;
+        else cur += c;
+      } else if (c === '"') q = true;
+      else if (c === delim) { out.push(cur); cur = ''; }
       else cur += c;
     }
+    out.push(cur);
+    return out;
   }
-  result.push(cur);
-  return result;
-}
+  function parseNum(s) {
+    s = String(s || '').replace(/rp|\s/gi, '');
+    if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(',', '.');
+    const n = parseFloat(s);
+    return isNaN(n) ? '' : String(n);
+  }
+  function importCSV(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = String(e.target.result).replace(/^\uFEFF/, '');
+      const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
+      if (!lines.length) { alert('File CSV kosong.'); return; }
+      const delim = lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
+      const start = /nama\s*barang/i.test(lines[0]) ? 1 : 0;
+      const rows = [];
+      for (let i = start; i < lines.length; i++) {
+        const c = parseLine(lines[i], delim);
+        if (!c[0] && !c[1] && !c[3]) continue;
+        rows.push({ nama: c[0] || '', banyak: parseNum(c[1]), satuan: c[2] || '', harga: parseNum(c[3]) });
+      }
+      if (!rows.length) { alert('Tidak ada baris data yang bisa dibaca.'); return; }
+      const f = makeFile(file.name.replace(/\.csv$/i, ''), rows);
+      store.files.push(f);
+      store.currentId = f.id;
+      saveStore();
+      renderAll();
+      alert('Berhasil: ' + rows.length + ' baris masuk sebagai file baru "' + f.name + '".');
+    };
+    reader.readAsText(file);
+  }
 
-load();
+  /* ---------- Backup / Restore ---------- */
+  function backupAll() {
+    const d = new Date().toISOString().slice(0, 10);
+    download('hpp-backup-' + d + '.json', JSON.stringify({ app: 'hpp-tracker', version: 2, files: store.files }, null, 2), 'application/json');
+  }
+  function restoreBackup(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data || !Array.isArray(data.files) || !data.files.length) throw new Error('format');
+        if (!confirm('Tambahkan ' + data.files.length + ' file dari backup? File yang sudah ada tidak akan ditimpa.')) return;
+        let last = null;
+        data.files.forEach((f) => {
+          last = makeFile(f.name || 'HPP', f.rows || []);
+          store.files.push(last);
+        });
+        store.currentId = last.id;
+        saveStore();
+        renderAll();
+      } catch (err) {
+        alert('File backup tidak valid.');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  /* ---------- wiring ---------- */
+  $('fileSelect').addEventListener('change', (e) => switchFile(e.target.value));
+  $('btnNew').addEventListener('click', newFile);
+  $('btnRename').addEventListener('click', renameFile);
+  $('btnDup').addEventListener('click', dupFile);
+  $('btnDel').addEventListener('click', deleteFile);
+  $('btnAdd').addEventListener('click', addRow);
+  $('btnAdd2').addEventListener('click', addRow);
+  $('btnExport').addEventListener('click', exportCSV);
+  $('btnImport').addEventListener('click', () => $('csvFile').click());
+  $('btnBackup').addEventListener('click', backupAll);
+  $('btnRestore').addEventListener('click', () => $('jsonFile').click());
+  $('btnClear').addEventListener('click', clearRows);
+  $('csvFile').addEventListener('change', (e) => {
+    if (e.target.files[0]) importCSV(e.target.files[0]);
+    e.target.value = '';
+  });
+  $('jsonFile').addEventListener('change', (e) => {
+    if (e.target.files[0]) restoreBackup(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  loadStore();
+  renderAll();
+})();
 </script>
 </body>
 </html>
