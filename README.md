@@ -1,41 +1,37 @@
-# DATA HPP — Tracker
+# Data HPP
 
-Web app sederhana buat catat Harga Pokok Penjualan (HPP) / modal barang: Nama Barang, Banyak, Satuan, Harga, Total (auto-hitung).
+Catat modal barang (HPP) dengan login. Data tersimpan di Firebase (gratis), bisa dibuka dari HP atau komputer mana saja.
 
-## Fitur
-- Tambah/hapus baris barang
-- Total per baris & grand total otomatis
-- Simpan otomatis di browser (localStorage) — gak hilang walau refresh
-- Export ke CSV (buat backup atau buka di Excel/Sheets)
-- Import dari CSV
+## File
+- `login.html` halaman masuk
+- `index.html` Home (catat barang, banyak file)
+- `dashboard.html` ringkasan semua file
+- `hpp-cloud.js` penghubung login dan database
+- `firebase-config.js` isi data Firebase milik sendiri
 
-## Cara pakai
-Buka `index.html` langsung di browser. Gak perlu install apa-apa, gak perlu server.
+## Pasang Firebase (gratis, tanpa kartu kredit)
 
-## Cara push ke GitHub
-
-Repo ini sudah di-`git init` dan sudah ada 1 commit awal. Tinggal:
-
-1. Buat repo baru (kosongan, tanpa README) di https://github.com/new — misal namanya `hpp-tracker`
-2. Di terminal, masuk ke folder project ini, lalu jalankan:
-
-```bash
-git remote add origin https://github.com/USERNAME/hpp-tracker.git
-git branch -M main
-git push -u origin main
-```
-
-Ganti `USERNAME` dengan username GitHub kamu.
-
-3. (Opsional) Aktifkan **GitHub Pages** di Settings → Pages → pilih branch `main` biar app-nya bisa diakses online lewat link `https://USERNAME.github.io/hpp-tracker/`.
-
-## Struktur
+1. Buka https://console.firebase.google.com lalu **Create a project**. Nama bebas, Google Analytics boleh dimatikan.
+2. **Build > Authentication > Get started > Sign-in method > Email/Password > Enable** (cukup toggle pertama), lalu Save.
+3. **Build > Firestore Database > Create database**. Pilih lokasi `asia-southeast2` (Jakarta), mode **Production**. Setelah jadi, buka tab **Rules**, ganti isinya dengan ini, lalu **Publish**:
 
 ```
-hpp-tracker/
-├── index.html   # seluruh app (HTML+CSS+JS jadi satu file)
-└── README.md
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
 ```
+
+4. Klik ikon roda gigi > **Project settings > General > Your apps**, klik ikon web `</>`, kasih nama, **Register app**. Salin nilai `apiKey`, `authDomain`, `projectId`, `appId` ke `firebase-config.js`.
+5. **Authentication > Settings > Authorized domains > Add domain**, isi `qiwekiw.github.io`.
+6. Upload semua file ke GitHub, buka `https://qiwekiw.github.io/hpp-tracker/login.html`, klik **Belum punya akun? Buat akun**.
+7. Setelah akun jadi, ubah `ALLOW_REGISTER` di `firebase-config.js` jadi `false`, upload ulang file itu.
 
 ## Catatan
-Data tersimpan per-browser (localStorage), bukan di cloud/database. Kalau ganti device atau clear browser data, data akan hilang kecuali sudah di-export CSV. Kalau nanti mau sinkron data lintas device (misal balik ke Google Sheets sebagai backend, atau pakai database), tinggal bilang — tinggal nambah lapisan sync di atas struktur ini.
+- Data lama di browser lama otomatis ditawarkan pindah ke akun saat login pertama.
+- Lupa password tidak bisa direset lewat email (username bukan email asli). Reset lewat Firebase Console > Authentication > Users.
+- Rules di atas membuat tiap akun hanya bisa membaca dan menulis datanya sendiri.

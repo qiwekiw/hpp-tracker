@@ -45,6 +45,12 @@
   .stat .v.g { color: var(--green); }
   .stat .s { font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  header { flex-wrap: wrap; }
+  .topbtns { display: flex; gap: 8px; flex: none; }
+  .boot { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--dim); }
+  .boot[hidden] { display: none; }
+  #bootMsg.err { color: var(--red); max-width: 420px; }
+
   /* chart */
   .bar { display: grid; grid-template-columns: minmax(70px, 28%) 1fr auto; gap: 10px; align-items: center; padding: 5px 0; font-size: 13px; }
   .bar .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -104,13 +110,17 @@
 </style>
 </head>
 <body>
+<div id="boot" class="boot"><div id="bootMsg">Memuat data...</div></div>
 <div class="wrap">
   <header>
     <div>
       <h1>Dashboard HPP</h1>
-      <div class="sub" id="sub">Ringkasan semua file yang sudah dicatat di Home.</div>
+      <div class="sub">Masuk sebagai <b id="who">-</b></div>
     </div>
-    <a class="btn" href="index.html">← Home</a>
+    <div class="topbtns">
+      <a class="btn" href="index.html">← Home</a>
+      <button type="button" id="btnLogout">Keluar</button>
+    </div>
   </header>
 
   <div class="stats">
@@ -153,27 +163,24 @@
   </div>
 </div>
 
-<script>
-(function () {
-  const KEY = 'hpp_tracker_v2';
+<script type="module">
+
+import * as cloud from './hpp-cloud.js';
+
+{
+  let user = null;
   const $ = (id) => document.getElementById(id);
   const num = (v) => parseFloat(v) || 0;
   const rupiah = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
   const fmtNum = (n) => (Math.round(n * 100) / 100).toLocaleString('id-ID');
   const filled = (r) => !!(String(r.nama || '').trim() || String(r.banyak || '').trim() || String(r.harga || '').trim());
 
-  let store = { files: [], currentId: null };
+  let store = { files: [] };
   let items = [];   // semua baris dari semua file
 
-  function load() {
-    store = { files: [], currentId: null };
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const p = JSON.parse(raw);
-        if (p && Array.isArray(p.files)) store = p;
-      }
-    } catch (e) { /* abaikan */ }
+  async function load() {
+    const files = await cloud.fetchFiles();
+    store = { files };
 
     items = [];
     store.files.forEach((f) => {
@@ -256,14 +263,7 @@
   }
 
   function openInHome(id) {
-    try {
-      const raw = localStorage.getItem(KEY);
-      const p = raw ? JSON.parse(raw) : null;
-      if (p && Array.isArray(p.files)) {
-        p.currentId = id;
-        localStorage.setItem(KEY, JSON.stringify(p));
-      }
-    } catch (e) { /* abaikan */ }
+    try { localStorage.setItem('hpp_current_' + user.uid, id); } catch (e) { /* abaikan */ }
     location.href = 'index.html';
   }
 
@@ -348,8 +348,13 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  function showBoot(msg, isErr) {
+    $('boot').hidden = false;
+    $('bootMsg').textContent = msg;
+    $('bootMsg').className = isErr ? 'err' : '';
+  }
+
   function renderAll() {
-    load();
     renderStats();
     renderChart();
     renderFiles();
@@ -357,17 +362,43 @@
     renderTable();
   }
 
+  async function refresh(first) {
+    try {
+      await load();
+      renderAll();
+      $('boot').hidden = true;
+    } catch (e) {
+      console.error(e);
+      if (!first) return;   // saat refresh diam-diam, biarkan data lama tampil
+      const code = (e && e.code) || '';
+      showBoot(code === 'permission-denied'
+        ? 'Akses ditolak oleh Firestore. Aturan (Rules) belum dipasang atau salah. Ikuti langkah Rules di panduan.'
+        : 'Gagal memuat data: ' + (code || (e && e.message) || 'kesalahan tidak dikenal'), true);
+    }
+  }
+
   $('q').addEventListener('input', renderTable);
   $('fFile').addEventListener('change', renderTable);
   $('fSort').addEventListener('change', renderTable);
   $('btnCsv').addEventListener('click', exportCsv);
-  // data ikut segar kalau Home diubah di tab lain atau tab ini kembali dibuka
-  window.addEventListener('storage', (e) => { if (e.key === KEY) renderAll(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) renderAll(); });
-  window.addEventListener('pageshow', (e) => { if (e.persisted) renderAll(); });
+  $('btnLogout').addEventListener('click', async () => {
+    try { await cloud.logout(); } catch (e) { /* abaikan */ }
+    location.replace('login.html');
+  });
+  // segarkan data saat tab dibuka lagi (mis. setelah mengubah di Home atau perangkat lain)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && user) refresh(false); });
+  window.addEventListener('pageshow', (e) => { if (e.persisted && user) refresh(false); });
 
-  renderAll();
-})();
+  (async function boot() {
+    if (!cloud.configured) {
+      showBoot('Firebase belum diatur. Isi file firebase-config.js dulu (lihat panduan).', true);
+      return;
+    }
+    user = await cloud.requireUser();
+    $('who').textContent = cloud.nameOf(user);
+    refresh(true);
+  })();
+}
 </script>
 </body>
 </html>

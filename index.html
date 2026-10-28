@@ -64,6 +64,17 @@
     overflow: hidden;
   }
 
+  header.top { flex-wrap: wrap; }
+  .topbtns { display: flex; gap: 8px; flex: none; }
+  button.ghost { min-height: 40px; }
+  .status { font-size: 12px; min-height: 16px; margin: -8px 0 12px; color: var(--dim); }
+  .status.ok { color: var(--green); }
+  .status.pending { color: var(--dim); }
+  .status.err { color: var(--red); cursor: pointer; text-decoration: underline; }
+  .boot { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--dim); }
+  .boot[hidden] { display: none; }
+  #bootMsg.err { color: var(--red); max-width: 420px; }
+
   /* ---- File picker ---- */
   .filebar { padding: 12px; margin-bottom: 12px; }
   .filebar .pick { display: flex; gap: 8px; align-items: center; }
@@ -179,16 +190,19 @@
 </style>
 </head>
 <body>
+<div id="boot" class="boot"><div id="bootMsg">Memuat data...</div></div>
 <div class="wrap">
   <header class="top">
     <div>
       <h1>Data HPP</h1>
-      <div class="sub">Catat modal barang. Tersimpan otomatis di browser ini.</div>
+      <div class="sub">Masuk sebagai <b id="who">-</b></div>
     </div>
-    <a class="navlink" href="dashboard.html">Dashboard</a>
+    <div class="topbtns">
+      <a class="navlink" href="dashboard.html">Dashboard</a>
+      <button type="button" id="btnLogout" class="ghost">Keluar</button>
+    </div>
   </header>
-
-  <div id="warn" class="warn" hidden>Data gagal disimpan di browser ini (mungkin mode private atau penyimpanan penuh). Gunakan Export CSV atau Backup supaya data tidak hilang.</div>
+  <div id="status" class="status" role="status" aria-live="polite"></div>
 
   <div class="card filebar">
     <div class="pick">
@@ -238,370 +252,501 @@
     <strong id="grand">Rp 0</strong>
   </div>
 
-  <div class="note">Data disimpan di browser (localStorage) per perangkat. Untuk pindah HP atau komputer, pakai Backup lalu Restore, atau Export CSV.</div>
+  <div class="note">Data tersimpan di akun online lu, jadi bisa dibuka dari HP atau komputer mana saja setelah login. Backup berguna sebagai cadangan pribadi.</div>
 </div>
 
-<script>
-(function () {
-  const KEY = 'hpp_tracker_v2';
-  const OLD_KEY = 'hpp_tracker_data_v1';
-  const $ = (id) => document.getElementById(id);
+<script type="module">
+import * as cloud from './hpp-cloud.js';
 
-  let store = { files: [], currentId: null };
+const $ = (id) => document.getElementById(id);
+let user = null;
+let store = { files: [], currentId: null };
 
-  /* ---------- helpers ---------- */
-  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const blankRow = () => ({ nama: '', banyak: '', satuan: '', harga: '' });
-  const num = (v) => parseFloat(v) || 0;
-  const rowTotal = (r) => num(r.banyak) * num(r.harga);
-  const rupiah = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
-  const cur = () => store.files.find((f) => f.id === store.currentId);
+/* ---------- helpers ---------- */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const blankRow = () => ({ nama: '', banyak: '', satuan: '', harga: '' });
+const num = (v) => parseFloat(v) || 0;
+const rowTotal = (r) => num(r.banyak) * num(r.harga);
+const rupiah = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
+const cur = () => store.files.find((f) => f.id === store.currentId);
+const hasData = (r) => !!r && ['nama', 'banyak', 'harga'].some((k) => {
+  const s = String(r[k] === undefined || r[k] === null ? '' : r[k]).trim();
+  return s !== '' && s !== '0';
+});
 
-  function normRow(r) {
-    r = r || {};
-    const s = (v) => (v === undefined || v === null || v === 0 ? '' : String(v));
-    return { nama: s(r.nama), banyak: s(r.banyak), satuan: s(r.satuan), harga: s(r.harga) };
+function normRow(r) {
+  r = r || {};
+  const s = (v) => (v === undefined || v === null || v === 0 ? '' : String(v));
+  return { nama: s(r.nama), banyak: s(r.banyak), satuan: s(r.satuan), harga: s(r.harga) };
+}
+function makeFile(name, rows) {
+  const clean = (rows || []).map(normRow);
+  const now = Date.now();
+  return { id: uid(), name: name || 'HPP', rows: clean.length ? clean : [blankRow()], created: now, updated: now };
+}
+function normFile(f) {
+  f.rows = (f.rows || []).map(normRow);
+  if (!f.rows.length) f.rows = [blankRow()];
+  f.name = f.name || 'HPP';
+  f.updated = f.updated || Date.now();
+  f.created = f.created || f.updated;
+  return f;
+}
+
+/* ---------- sinkron ke cloud ---------- */
+const dirty = new Set();
+let saveTimer = null;
+let inflight = 0;
+
+function setStatus(kind, text) {
+  const s = $('status');
+  s.className = 'status ' + kind;
+  s.textContent = text;
+}
+function markDirty(id) {
+  dirty.add(id);
+  setStatus('pending', 'Menyimpan...');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flush, 700);
+}
+async function flush() {
+  clearTimeout(saveTimer);
+  const ids = [...dirty];
+  dirty.clear();
+  if (!ids.length) return;
+  inflight++;
+  try {
+    await Promise.all(ids.map((id) => {
+      const f = store.files.find((x) => x.id === id);
+      return f ? cloud.pushFile(f) : null;
+    }));
+    if (!dirty.size && inflight === 1) setStatus('ok', 'Tersimpan di cloud');
+  } catch (e) {
+    ids.forEach((id) => dirty.add(id));
+    setStatus('err', 'Gagal menyimpan. Ketuk di sini untuk coba lagi.');
+    console.error(e);
+  } finally {
+    inflight--;
   }
-  function makeFile(name, rows) {
-    const clean = (rows || []).map(normRow);
-    return { id: uid(), name: name || 'HPP', rows: clean.length ? clean : [blankRow()], updated: Date.now() };
-  }
+}
+$('status').addEventListener('click', () => { if (dirty.size) flush(); });
 
-  /* ---------- storage ---------- */
-  function saveStore() {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(store));
-      $('warn').hidden = true;
-    } catch (e) {
-      $('warn').hidden = false;
+function setCurrent(id) {
+  store.currentId = id;
+  try { localStorage.setItem('hpp_current_' + user.uid, id); } catch (e) { /* abaikan */ }
+}
+function touch() {
+  cur().updated = Date.now();
+  markDirty(cur().id);
+  updateMeta();
+}
+
+/* ---------- muat data ---------- */
+function readLegacy() {
+  const out = [];
+  try {
+    const raw = localStorage.getItem('hpp_tracker_v2');
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p && Array.isArray(p.files)) {
+        p.files.forEach((f) => { if ((f.rows || []).some(hasData)) out.push({ name: f.name, rows: f.rows }); });
+      }
     }
-  }
-  function loadStore() {
+  } catch (e) { /* abaikan */ }
+  if (!out.length) {
     try {
-      const raw = localStorage.getItem(KEY);
+      const raw = localStorage.getItem('hpp_tracker_data_v1');
       if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.files)) store = parsed;
+        const rows = JSON.parse(raw) || [];
+        if (rows.some(hasData)) out.push({ name: 'HPP (data lama)', rows });
       }
     } catch (e) { /* abaikan */ }
-
-    if (!store.files.length) {
-      // migrasi dari versi lama (satu daftar saja)
-      let oldRows = [];
-      try {
-        const old = localStorage.getItem(OLD_KEY);
-        if (old) oldRows = JSON.parse(old) || [];
-      } catch (e) { /* abaikan */ }
-      const hasOld = oldRows.some((r) => r && (r.nama || r.banyak || r.harga));
-      const f = makeFile(hasOld ? 'HPP (data lama)' : 'HPP 1', oldRows);
-      store = { files: [f], currentId: f.id };
-      saveStore();
-    }
-    store.files.forEach((f) => {
-      f.rows = (f.rows || []).map(normRow);
-      if (!f.rows.length) f.rows = [blankRow()];
-      if (!f.updated) f.updated = Date.now();
-    });
-    if (!cur()) store.currentId = store.files[0].id;
   }
-  function touch() {
-    cur().updated = Date.now();
-    saveStore();
-    updateMeta();
+  return out;
+}
+
+async function firstLoadFiles() {
+  let files = await cloud.fetchFiles();
+  if (files.length) return files;
+
+  const flag = 'hpp_migrated_' + user.uid;
+  let created = [];
+  const legacy = localStorage.getItem(flag) ? [] : readLegacy();
+  if (legacy.length && confirm('Ada ' + legacy.length + ' file data lama di browser ini. Pindahkan ke akun online?')) {
+    created = legacy.map((l) => makeFile(l.name, l.rows));
   }
+  try { localStorage.setItem(flag, '1'); } catch (e) { /* abaikan */ }
+  if (!created.length) created = [makeFile('HPP 1', [])];
+  await Promise.all(created.map((f) => cloud.pushFile(f)));
+  return created;
+}
 
-  /* ---------- render ---------- */
-  function updateMeta() {
-    const f = cur();
-    const t = new Date(f.updated).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
-    $('meta').textContent = f.rows.length + ' baris, terakhir diubah ' + t;
+async function loadRemote(first) {
+  let files = first ? await firstLoadFiles() : await cloud.fetchFiles();
+  if (!files.length) return false;
+  files = files.map(normFile);
+  store.files = files;
+  let saved = null;
+  try { saved = localStorage.getItem('hpp_current_' + user.uid); } catch (e) { /* abaikan */ }
+  const keep = cur() ? store.currentId : null;
+  const want = [keep, saved].find((id) => id && files.some((f) => f.id === id));
+  setCurrent(want || files[0].id);
+  return true;
+}
+
+/* ---------- render ---------- */
+function updateMeta() {
+  const f = cur();
+  const t = new Date(f.updated).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+  $('meta').textContent = f.rows.length + ' baris, terakhir diubah ' + t;
+}
+function updateGrand() {
+  const sum = cur().rows.reduce((s, r) => s + rowTotal(r), 0);
+  $('grand').textContent = rupiah(sum);
+}
+function renderFileSelect() {
+  const sel = $('fileSelect');
+  sel.innerHTML = '';
+  store.files.forEach((f) => {
+    const o = document.createElement('option');
+    o.value = f.id;
+    o.textContent = f.name;
+    sel.appendChild(o);
+  });
+  sel.value = store.currentId;
+}
+
+function field(row, key, label, type, placeholder, onChange) {
+  const cell = document.createElement('div');
+  cell.className = 'cell c-' + key;
+  const l = document.createElement('span');
+  l.className = 'lbl';
+  l.textContent = label;
+  const inp = document.createElement('input');
+  inp.type = type;
+  inp.placeholder = placeholder;
+  inp.value = row[key];
+  inp.autocomplete = 'off';
+  inp.setAttribute('aria-label', label);
+  if (type === 'number') {
+    inp.inputMode = 'decimal';
+    inp.step = 'any';
+    inp.min = '0';
   }
-  function updateGrand() {
-    const sum = cur().rows.reduce((s, r) => s + rowTotal(r), 0);
-    $('grand').textContent = rupiah(sum);
-  }
-  function renderFileSelect() {
-    const sel = $('fileSelect');
-    sel.innerHTML = '';
-    store.files.forEach((f) => {
-      const o = document.createElement('option');
-      o.value = f.id;
-      o.textContent = f.name;
-      sel.appendChild(o);
-    });
-    sel.value = store.currentId;
-  }
+  // hanya update data + total, TIDAK membangun ulang baris => fokus tidak hilang
+  inp.addEventListener('input', () => {
+    row[key] = inp.value;
+    onChange();
+  });
+  cell.append(l, inp);
+  return cell;
+}
 
-  function field(row, key, label, type, placeholder, onChange) {
-    const cell = document.createElement('div');
-    cell.className = 'cell c-' + key;
-    const l = document.createElement('span');
-    l.className = 'lbl';
-    l.textContent = label;
-    const inp = document.createElement('input');
-    inp.type = type;
-    inp.placeholder = placeholder;
-    inp.value = row[key];
-    inp.autocomplete = 'off';
-    inp.setAttribute('aria-label', label);
-    if (type === 'number') {
-      inp.inputMode = 'decimal';
-      inp.step = 'any';
-      inp.min = '0';
-    }
-    // hanya update data + total, TIDAK membangun ulang baris => fokus tidak hilang
-    inp.addEventListener('input', () => {
-      row[key] = inp.value;
-      onChange();
-    });
-    cell.append(l, inp);
-    return cell;
-  }
+function buildRow(row) {
+  const el = document.createElement('div');
+  el.className = 'row';
 
-  function buildRow(row) {
-    const el = document.createElement('div');
-    el.className = 'row';
+  const totalCell = document.createElement('div');
+  totalCell.className = 'cell c-total';
+  const totalLbl = document.createElement('span');
+  totalLbl.className = 'lbl';
+  totalLbl.textContent = 'Total';
+  const totalVal = document.createElement('span');
+  totalCell.append(totalLbl, totalVal);
 
-    const totalCell = document.createElement('div');
-    totalCell.className = 'cell c-total';
-    const totalLbl = document.createElement('span');
-    totalLbl.className = 'lbl';
-    totalLbl.textContent = 'Total';
-    const totalVal = document.createElement('span');
-    totalCell.append(totalLbl, totalVal);
-
-    const refresh = () => {
-      totalVal.textContent = rupiah(rowTotal(row));
-      updateGrand();
-      touch();
-    };
-
-    const delCell = document.createElement('div');
-    delCell.className = 'cell c-del';
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.textContent = '✕';
-    del.title = 'Hapus baris';
-    del.setAttribute('aria-label', 'Hapus baris');
-    del.addEventListener('click', () => {
-      const f = cur();
-      f.rows.splice(f.rows.indexOf(row), 1);
-      if (!f.rows.length) f.rows.push(blankRow());
-      touch();
-      renderRows();
-    });
-    delCell.appendChild(del);
-
-    el.append(
-      field(row, 'nama', 'Nama barang', 'text', 'Nama barang', refresh),
-      field(row, 'banyak', 'Banyak', 'number', '0', refresh),
-      field(row, 'satuan', 'Satuan', 'text', 'pcs / kg / m', refresh),
-      field(row, 'harga', 'Harga', 'number', '0', refresh),
-      totalCell,
-      delCell
-    );
+  const refresh = () => {
     totalVal.textContent = rupiah(rowTotal(row));
-    return el;
-  }
-
-  function renderRows(focusLast) {
-    const box = $('rows');
-    box.innerHTML = '';
-    cur().rows.forEach((r) => box.appendChild(buildRow(r)));
     updateGrand();
-    updateMeta();
-    if (focusLast) {
-      const last = box.lastElementChild;
-      const inp = last && last.querySelector('input');
-      if (inp) {
-        inp.focus();
-        inp.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      }
-    }
-  }
-  function renderAll() {
-    renderFileSelect();
-    renderRows();
-  }
-
-  /* ---------- aksi baris ---------- */
-  function addRow() {
-    cur().rows.push(blankRow());
     touch();
-    renderRows(true);
-  }
-  function clearRows() {
-    if (!confirm('Kosongkan semua barang di file "' + cur().name + '"?')) return;
-    cur().rows = [blankRow()];
-    touch();
-    renderRows();
-  }
+  };
 
-  /* ---------- aksi file ---------- */
-  function switchFile(id) {
-    store.currentId = id;
-    saveStore();
-    renderAll();
-  }
-  function newFile() {
-    const name = prompt('Nama file baru:', 'HPP ' + (store.files.length + 1));
-    if (name === null || !name.trim()) return;
-    const f = makeFile(name.trim(), []);
-    store.files.push(f);
-    store.currentId = f.id;
-    saveStore();
-    renderAll();
-  }
-  function renameFile() {
-    const name = prompt('Ubah nama file:', cur().name);
-    if (name === null || !name.trim()) return;
-    cur().name = name.trim();
-    touch();
-    renderFileSelect();
-  }
-  function dupFile() {
-    const src = cur();
-    const f = makeFile(src.name + ' (salinan)', JSON.parse(JSON.stringify(src.rows)));
-    store.files.push(f);
-    store.currentId = f.id;
-    saveStore();
-    renderAll();
-  }
-  function deleteFile() {
-    if (!confirm('Hapus file "' + cur().name + '"? Tidak bisa dibatalkan.')) return;
-    store.files = store.files.filter((f) => f.id !== store.currentId);
-    if (!store.files.length) store.files.push(makeFile('HPP 1', []));
-    store.currentId = store.files[0].id;
-    saveStore();
-    renderAll();
-  }
-
-  /* ---------- CSV ---------- */
-  function csvEscape(v) {
-    const s = String(v === undefined || v === null ? '' : v);
-    return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  }
-  function download(name, text, mime) {
-    const blob = new Blob([text], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  const safeName = (s) => s.replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '') || 'hpp';
-
-  function exportCSV() {
+  const delCell = document.createElement('div');
+  delCell.className = 'cell c-del';
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.textContent = '✕';
+  del.title = 'Hapus baris';
+  del.setAttribute('aria-label', 'Hapus baris');
+  del.addEventListener('click', () => {
     const f = cur();
-    const lines = ['Nama Barang,Banyak,Satuan,Harga,Total'];
-    f.rows.forEach((r) => {
-      lines.push([csvEscape(r.nama), csvEscape(r.banyak), csvEscape(r.satuan), csvEscape(r.harga), rowTotal(r)].join(','));
-    });
-    download(safeName(f.name) + '.csv', '\uFEFF' + lines.join('\n'), 'text/csv;charset=utf-8');
-  }
-  function parseLine(line, delim) {
-    const out = [];
-    let cur = '', q = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (q) {
-        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-        else if (c === '"') q = false;
-        else cur += c;
-      } else if (c === '"') q = true;
-      else if (c === delim) { out.push(cur); cur = ''; }
-      else cur += c;
+    f.rows.splice(f.rows.indexOf(row), 1);
+    if (!f.rows.length) f.rows.push(blankRow());
+    touch();
+    renderRows();
+  });
+  delCell.appendChild(del);
+
+  el.append(
+    field(row, 'nama', 'Nama barang', 'text', 'Nama barang', refresh),
+    field(row, 'banyak', 'Banyak', 'number', '0', refresh),
+    field(row, 'satuan', 'Satuan', 'text', 'pcs / kg / m', refresh),
+    field(row, 'harga', 'Harga', 'number', '0', refresh),
+    totalCell,
+    delCell
+  );
+  totalVal.textContent = rupiah(rowTotal(row));
+  return el;
+}
+
+function renderRows(focusLast) {
+  const box = $('rows');
+  box.innerHTML = '';
+  cur().rows.forEach((r) => box.appendChild(buildRow(r)));
+  updateGrand();
+  updateMeta();
+  if (focusLast) {
+    const last = box.lastElementChild;
+    const inp = last && last.querySelector('input');
+    if (inp) {
+      inp.focus();
+      if (inp.scrollIntoView) inp.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
-    out.push(cur);
-    return out;
   }
-  function parseNum(s) {
-    s = String(s || '').replace(/rp|\s/gi, '');
-    if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
-    else s = s.replace(',', '.');
-    const n = parseFloat(s);
-    return isNaN(n) ? '' : String(n);
-  }
-  function importCSV(file) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = String(e.target.result).replace(/^\uFEFF/, '');
-      const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
-      if (!lines.length) { alert('File CSV kosong.'); return; }
-      const delim = lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
-      const start = /nama\s*barang/i.test(lines[0]) ? 1 : 0;
-      const rows = [];
-      for (let i = start; i < lines.length; i++) {
-        const c = parseLine(lines[i], delim);
-        if (!c[0] && !c[1] && !c[3]) continue;
-        rows.push({ nama: c[0] || '', banyak: parseNum(c[1]), satuan: c[2] || '', harga: parseNum(c[3]) });
-      }
-      if (!rows.length) { alert('Tidak ada baris data yang bisa dibaca.'); return; }
-      const f = makeFile(file.name.replace(/\.csv$/i, ''), rows);
-      store.files.push(f);
-      store.currentId = f.id;
-      saveStore();
-      renderAll();
-      alert('Berhasil: ' + rows.length + ' baris masuk sebagai file baru "' + f.name + '".');
-    };
-    reader.readAsText(file);
-  }
+}
+function renderAll() {
+  renderFileSelect();
+  renderRows();
+}
 
-  /* ---------- Backup / Restore ---------- */
-  function backupAll() {
-    const d = new Date().toISOString().slice(0, 10);
-    download('hpp-backup-' + d + '.json', JSON.stringify({ app: 'hpp-tracker', version: 2, files: store.files }, null, 2), 'application/json');
-  }
-  function restoreBackup(file) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target.result);
-        if (!data || !Array.isArray(data.files) || !data.files.length) throw new Error('format');
-        if (!confirm('Tambahkan ' + data.files.length + ' file dari backup? File yang sudah ada tidak akan ditimpa.')) return;
-        let last = null;
-        data.files.forEach((f) => {
-          last = makeFile(f.name || 'HPP', f.rows || []);
-          store.files.push(last);
-        });
-        store.currentId = last.id;
-        saveStore();
-        renderAll();
-      } catch (err) {
-        alert('File backup tidak valid.');
-      }
-    };
-    reader.readAsText(file);
-  }
+/* ---------- aksi baris ---------- */
+function addRow() {
+  cur().rows.push(blankRow());
+  touch();
+  renderRows(true);
+}
+function clearRows() {
+  if (!confirm('Kosongkan semua barang di file "' + cur().name + '"?')) return;
+  cur().rows = [blankRow()];
+  touch();
+  renderRows();
+}
 
-  /* ---------- wiring ---------- */
-  $('fileSelect').addEventListener('change', (e) => switchFile(e.target.value));
-  $('btnNew').addEventListener('click', newFile);
-  $('btnRename').addEventListener('click', renameFile);
-  $('btnDup').addEventListener('click', dupFile);
-  $('btnDel').addEventListener('click', deleteFile);
-  $('btnAdd').addEventListener('click', addRow);
-  $('btnAdd2').addEventListener('click', addRow);
-  $('btnExport').addEventListener('click', exportCSV);
-  $('btnImport').addEventListener('click', () => $('csvFile').click());
-  $('btnBackup').addEventListener('click', backupAll);
-  $('btnRestore').addEventListener('click', () => $('jsonFile').click());
-  $('btnClear').addEventListener('click', clearRows);
-  $('csvFile').addEventListener('change', (e) => {
-    if (e.target.files[0]) importCSV(e.target.files[0]);
-    e.target.value = '';
-  });
-  $('jsonFile').addEventListener('change', (e) => {
-    if (e.target.files[0]) restoreBackup(e.target.files[0]);
-    e.target.value = '';
-  });
-
-  loadStore();
+/* ---------- aksi file ---------- */
+function switchFile(id) {
+  setCurrent(id);
   renderAll();
-})();
+}
+function addFileObj(f) {
+  store.files.push(f);
+  setCurrent(f.id);
+  markDirty(f.id);
+  renderAll();
+}
+function newFile() {
+  const name = prompt('Nama file baru:', 'HPP ' + (store.files.length + 1));
+  if (name === null || !name.trim()) return;
+  addFileObj(makeFile(name.trim(), []));
+}
+function renameFile() {
+  const name = prompt('Ubah nama file:', cur().name);
+  if (name === null || !name.trim()) return;
+  cur().name = name.trim();
+  touch();
+  renderFileSelect();
+}
+function dupFile() {
+  const src = cur();
+  addFileObj(makeFile(src.name + ' (salinan)', JSON.parse(JSON.stringify(src.rows))));
+}
+async function deleteFile() {
+  if (!confirm('Hapus file "' + cur().name + '"? Tidak bisa dibatalkan.')) return;
+  const id = store.currentId;
+  try {
+    await cloud.removeFile(id);
+  } catch (e) {
+    alert('Gagal menghapus di cloud. Cek koneksi lalu coba lagi.');
+    return;
+  }
+  dirty.delete(id);
+  store.files = store.files.filter((f) => f.id !== id);
+  if (!store.files.length) {
+    const f = makeFile('HPP 1', []);
+    store.files.push(f);
+    markDirty(f.id);
+  }
+  setCurrent(store.files[0].id);
+  renderAll();
+}
+
+/* ---------- CSV ---------- */
+function csvEscape(v) {
+  const s = String(v === undefined || v === null ? '' : v);
+  return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function download(name, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const safeName = (s) => s.replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '') || 'hpp';
+
+function exportCSV() {
+  const f = cur();
+  const lines = ['Nama Barang,Banyak,Satuan,Harga,Total'];
+  f.rows.forEach((r) => {
+    lines.push([csvEscape(r.nama), csvEscape(r.banyak), csvEscape(r.satuan), csvEscape(r.harga), rowTotal(r)].join(','));
+  });
+  download(safeName(f.name) + '.csv', '\uFEFF' + lines.join('\n'), 'text/csv;charset=utf-8');
+}
+function parseLine(line, delim) {
+  const out = [];
+  let c0 = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) {
+      if (c === '"' && line[i + 1] === '"') { c0 += '"'; i++; }
+      else if (c === '"') q = false;
+      else c0 += c;
+    } else if (c === '"') q = true;
+    else if (c === delim) { out.push(c0); c0 = ''; }
+    else c0 += c;
+  }
+  out.push(c0);
+  return out;
+}
+function parseNum(s) {
+  s = String(s || '').replace(/rp|\s/gi, '');
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  else s = s.replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? '' : String(n);
+}
+function importCSV(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = String(e.target.result).replace(/^\uFEFF/, '');
+    const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
+    if (!lines.length) { alert('File CSV kosong.'); return; }
+    const delim = lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
+    const start = /nama\s*barang/i.test(lines[0]) ? 1 : 0;
+    const rows = [];
+    for (let i = start; i < lines.length; i++) {
+      const c = parseLine(lines[i], delim);
+      if (!c[0] && !c[1] && !c[3]) continue;
+      rows.push({ nama: c[0] || '', banyak: parseNum(c[1]), satuan: c[2] || '', harga: parseNum(c[3]) });
+    }
+    if (!rows.length) { alert('Tidak ada baris data yang bisa dibaca.'); return; }
+    const f = makeFile(file.name.replace(/\.csv$/i, ''), rows);
+    addFileObj(f);
+    alert('Berhasil: ' + rows.length + ' baris masuk sebagai file baru "' + f.name + '".');
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- Backup / Restore ---------- */
+function backupAll() {
+  const d = new Date().toISOString().slice(0, 10);
+  download('hpp-backup-' + d + '.json', JSON.stringify({ app: 'hpp-tracker', version: 3, files: store.files }, null, 2), 'application/json');
+}
+function restoreBackup(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data || !Array.isArray(data.files) || !data.files.length) throw new Error('format');
+      if (!confirm('Tambahkan ' + data.files.length + ' file dari backup? File yang sudah ada tidak akan ditimpa.')) return;
+      data.files.forEach((f) => {
+        const nf = makeFile(f.name || 'HPP', f.rows || []);
+        store.files.push(nf);
+        markDirty(nf.id);
+        setCurrent(nf.id);
+      });
+      renderAll();
+    } catch (err) {
+      alert('File backup tidak valid.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- boot & sesi ---------- */
+function showBoot(msg, isErr) {
+  $('boot').hidden = false;
+  $('bootMsg').textContent = msg;
+  $('bootMsg').className = isErr ? 'err' : '';
+}
+function hideBoot() { $('boot').hidden = true; }
+
+function bootError(e) {
+  console.error(e);
+  const code = (e && e.code) || '';
+  if (code === 'permission-denied') {
+    showBoot('Akses ditolak oleh Firestore. Aturan (Rules) belum dipasang atau salah. Ikuti langkah Rules di panduan.', true);
+  } else if (code === 'unavailable' || /network|offline/i.test((e && e.message) || '')) {
+    showBoot('Tidak bisa terhubung ke server. Cek internet lalu muat ulang halaman.', true);
+  } else {
+    showBoot('Gagal memuat data: ' + (code || (e && e.message) || 'kesalahan tidak dikenal'), true);
+  }
+}
+
+async function logout() {
+  await flush();
+  if (dirty.size && !confirm('Ada perubahan yang belum tersimpan. Tetap keluar?')) return;
+  try { await cloud.logout(); } catch (e) { /* abaikan */ }
+  location.replace('login.html');
+}
+
+async function boot() {
+  if (!cloud.configured) {
+    showBoot('Firebase belum diatur. Isi file firebase-config.js dulu (lihat panduan).', true);
+    return;
+  }
+  user = await cloud.requireUser();
+  $('who').textContent = cloud.nameOf(user);
+  try {
+    await loadRemote(true);
+  } catch (e) {
+    bootError(e);
+    return;
+  }
+  hideBoot();
+  renderAll();
+  setStatus('ok', 'Tersimpan di cloud');
+}
+
+/* ---------- wiring ---------- */
+$('fileSelect').addEventListener('change', (e) => switchFile(e.target.value));
+$('btnNew').addEventListener('click', newFile);
+$('btnRename').addEventListener('click', renameFile);
+$('btnDup').addEventListener('click', dupFile);
+$('btnDel').addEventListener('click', deleteFile);
+$('btnAdd').addEventListener('click', addRow);
+$('btnAdd2').addEventListener('click', addRow);
+$('btnExport').addEventListener('click', exportCSV);
+$('btnImport').addEventListener('click', () => $('csvFile').click());
+$('btnBackup').addEventListener('click', backupAll);
+$('btnRestore').addEventListener('click', () => $('jsonFile').click());
+$('btnClear').addEventListener('click', clearRows);
+$('btnLogout').addEventListener('click', logout);
+$('csvFile').addEventListener('change', (e) => {
+  if (e.target.files[0]) importCSV(e.target.files[0]);
+  e.target.value = '';
+});
+$('jsonFile').addEventListener('change', (e) => {
+  if (e.target.files[0]) restoreBackup(e.target.files[0]);
+  e.target.value = '';
+});
+
+// simpan segera saat tab disembunyikan; segarkan data dari cloud saat tab dibuka lagi
+document.addEventListener('visibilitychange', async () => {
+  if (!user) return;
+  if (document.hidden) { if (dirty.size) flush(); return; }
+  if (dirty.size || inflight) return;
+  try {
+    if (await loadRemote(false)) renderAll();
+  } catch (e) { /* abaikan, data lokal tetap tampil */ }
+});
+window.addEventListener('beforeunload', (e) => {
+  if (dirty.size || inflight) { e.preventDefault(); e.returnValue = ''; }
+});
+
+boot();
 </script>
 </body>
 </html>
