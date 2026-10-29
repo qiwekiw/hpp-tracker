@@ -1,37 +1,67 @@
 # Data HPP
 
-Catat modal barang (HPP) dengan login. Data tersimpan di Firebase (gratis), bisa dibuka dari HP atau komputer mana saja.
+Catat modal barang (HPP) dengan login dan dua peran.
+
+- **Admin**: akses penuh (buat, ubah, hapus, bagikan, kelola pemodal).
+- **Pemodal**: hanya melihat file HPP yang dibagikan admin ke akunnya.
 
 ## File
-- `login.html` halaman masuk
-- `index.html` Home (catat barang, banyak file)
-- `dashboard.html` ringkasan semua file
+- `login.html` halaman masuk (tidak ada pendaftaran, akun dibuat admin)
+- `index.html` Home
+- `dashboard.html` ringkasan
+- `pemodal.html` kelola akun pemodal (khusus admin)
 - `hpp-cloud.js` penghubung login dan database
-- `firebase-config.js` isi data Firebase milik sendiri
+- `firebase-config.js` data Firebase milik sendiri (jangan ditimpa)
 
-## Pasang Firebase (gratis, tanpa kartu kredit)
+## Pasang peran admin dan aturan baru
 
-1. Buka https://console.firebase.google.com lalu **Create a project**. Nama bebas, Google Analytics boleh dimatikan.
-2. **Build > Authentication > Get started > Sign-in method > Email/Password > Enable** (cukup toggle pertama), lalu Save.
-3. **Build > Firestore Database > Create database**. Pilih lokasi `asia-southeast2` (Jakarta), mode **Production**. Setelah jadi, buka tab **Rules**, ganti isinya dengan ini, lalu **Publish**:
+1. Firebase Console > **Authentication > Users**, salin **User UID** akun admin.
+2. **Firestore Database > Data > Start collection**. Collection ID: `admins`. Document ID: tempel UID tadi. Tambah field `role` (string) berisi `admin`. Save.
+3. **Firestore Database > Rules**, ganti isinya dengan ini lalu **Publish**:
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // daftar admin: hanya dibuat manual lewat Console
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // daftar pemodal
+    match /members/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    // file HPP: admin penuh, pemodal hanya baca file yang dibagikan ke uid-nya
+    match /files/{fileId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid in resource.data.viewers);
+      allow write: if isAdmin();
+    }
+
+    // data versi lama (hanya dibaca untuk dipindahkan sekali)
     match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
   }
 }
 ```
 
-4. Klik ikon roda gigi > **Project settings > General > Your apps**, klik ikon web `</>`, kasih nama, **Register app**. Salin nilai `apiKey`, `authDomain`, `projectId`, `appId` ke `firebase-config.js`.
-5. **Authentication > Settings > Authorized domains > Add domain**, isi `qiwekiw.github.io`.
-6. Upload semua file ke GitHub, buka `https://qiwekiw.github.io/hpp-tracker/login.html`, klik **Belum punya akun? Buat akun**.
-7. Setelah akun jadi, ubah `ALLOW_REGISTER` di `firebase-config.js` jadi `false`, upload ulang file itu.
+4. Upload `index.html`, `dashboard.html`, `login.html`, `pemodal.html`, `hpp-cloud.js` ke GitHub.
+5. Login sebagai admin. Data lama otomatis pindah ke struktur baru.
+6. Buka **Pemodal**, buat akun pemodal. Di Home pilih file lalu klik **Bagikan**.
 
 ## Catatan
-- Data lama di browser lama otomatis ditawarkan pindah ke akun saat login pertama.
-- Lupa password tidak bisa direset lewat email (username bukan email asli). Reset lewat Firebase Console > Authentication > Users.
-- Rules di atas membuat tiap akun hanya bisa membaca dan menulis datanya sendiri.
+- Jangan matikan "Enable create (sign-up)" di Firebase, karena admin membuat akun pemodal lewat jalur itu.
+- Lupa password pemodal: reset atau hapus akun lewat Firebase Console > Authentication > Users.

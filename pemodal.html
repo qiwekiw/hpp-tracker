@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Pemodal - Data HPP</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --panel-alt:#1e222b; --border:#2a2f3a; --text:#e8e9ec; --dim:#9aa0ab; --accent:#4f8cff; --green:#35c98f; --red:#ff5d6c; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.4;
+    padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+  }
+  .wrap { max-width: 700px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 2px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+  .sub { color: var(--dim); font-size: 13px; }
+  .topbtns { display: flex; gap: 8px; flex: none; }
+  a.btn, button, input[type="text"], input[type="password"] {
+    font: inherit; font-size: 14px; color: var(--text); background: var(--panel-alt);
+    border: 1px solid var(--border); border-radius: 8px; min-height: 40px; padding: 8px 14px;
+  }
+  a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+  button { cursor: pointer; }
+  a.btn:hover, button:hover { border-color: var(--accent); }
+  a.btn:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .primary:hover { background: #3f7ae0; }
+  .primary:disabled { opacity: .6; cursor: default; }
+  .danger { color: var(--red); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  label.f { display: block; font-size: 13px; color: var(--dim); margin: 0 0 6px; }
+  input[type="text"], input[type="password"] { width: 100%; font-size: 16px; padding: 11px 12px; margin-bottom: 12px; cursor: text; }
+  .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); margin: -4px 0 12px; }
+  .chk input { width: 18px; height: 18px; margin: 0; }
+  .msg { font-size: 13px; min-height: 18px; margin-bottom: 10px; }
+  .msg.err { color: var(--red); }
+  .msg.ok { color: var(--green); }
+  .member { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; background: var(--panel-alt); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; }
+  .member .n { font-weight: 600; overflow-wrap: anywhere; }
+  .member .m { font-size: 12px; color: var(--dim); }
+  .empty { color: var(--dim); font-size: 14px; padding: 6px 0; }
+  .note { color: var(--dim); font-size: 12px; margin-top: 4px; }
+  .boot { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--dim); }
+  #bootMsg.err { color: var(--red); max-width: 420px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 640px) { .topbtns { width: 100%; } .topbtns > * { flex: 1; justify-content: center; } }
+</style>
+</head>
+<body>
+<div id="boot" class="boot"><div id="bootMsg">Memuat data...</div></div>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Kelola pemodal</h1>
+      <div class="sub">Masuk sebagai <b id="who">-</b></div>
+    </div>
+    <div class="topbtns">
+      <a class="btn" href="index.html">← Home</a>
+      <a class="btn" href="dashboard.html">Dashboard</a>
+      <button type="button" id="btnLogout">Keluar</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>Tambah akun pemodal</h2>
+    <form id="form" autocomplete="off" novalidate>
+      <label class="f" for="u">Username</label>
+      <input type="text" id="u" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="mis. budi atau pt.maju">
+      <label class="f" for="p">Password (minimal 8 karakter)</label>
+      <input type="password" id="p" autocomplete="new-password">
+      <label class="chk"><input type="checkbox" id="show"> Tampilkan password</label>
+      <div class="msg" id="msg" role="status" aria-live="polite"></div>
+      <button type="submit" class="primary" id="go">Buat akun pemodal</button>
+    </form>
+    <div class="note">Setelah dibuat, beri tahu username dan password ke pemodal. Lalu bagikan file lewat tombol <b>Bagikan</b> di Home.</div>
+  </div>
+
+  <div class="card">
+    <h2>Daftar pemodal</h2>
+    <div id="list"></div>
+    <div class="note">Lupa password pemodal atau mau hapus akunnya permanen: lewat Firebase Console, Authentication, Users. Tombol Hapus di sini mencabut semua akses dan menghilangkannya dari daftar.</div>
+  </div>
+</div>
+
+<script type="module">
+import * as cloud from './hpp-cloud.js';
+
+const $ = (id) => document.getElementById(id);
+let user = null;
+let members = [];
+let files = [];
+
+function showBoot(msg, isErr) {
+  $('boot').hidden = false;
+  $('bootMsg').textContent = msg;
+  $('bootMsg').className = isErr ? 'err' : '';
+}
+function setMsg(text, kind) {
+  const m = $('msg');
+  m.textContent = text;
+  m.className = 'msg' + (kind ? ' ' + kind : '');
+}
+
+function friendly(e) {
+  const c = (e && e.code) || '';
+  const map = {
+    'auth/email-already-in-use': 'Username itu sudah dipakai. Coba username lain.',
+    'auth/weak-password': 'Password terlalu lemah. Pakai minimal 8 karakter.',
+    'auth/invalid-email': 'Username tidak valid.',
+    'auth/network-request-failed': 'Tidak ada koneksi internet. Coba lagi.',
+    'auth/operation-not-allowed': 'Pendaftaran akun dimatikan di Firebase. Aktifkan lagi Email/Password.',
+    'auth/admin-restricted-operation': 'Pembuatan akun baru dimatikan di Firebase. Jangan matikan "Enable create (sign-up)".',
+    'permission-denied': 'Akses ditolak. Pastikan akun lu terdaftar sebagai admin dan Rules sudah diperbarui.'
+  };
+  return map[c] || ('Gagal: ' + (c || (e && e.message) || 'kesalahan tidak dikenal'));
+}
+
+function sharedCount(uid) {
+  return files.filter((f) => (f.viewers || []).includes(uid)).length;
+}
+
+function render() {
+  const box = $('list');
+  box.innerHTML = '';
+  if (!members.length) {
+    const d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = 'Belum ada pemodal.';
+    box.appendChild(d);
+    return;
+  }
+  members.forEach((m) => {
+    const row = document.createElement('div');
+    row.className = 'member';
+    const left = document.createElement('div');
+    const n = document.createElement('div');
+    n.className = 'n';
+    n.textContent = m.username;
+    const sub = document.createElement('div');
+    sub.className = 'm';
+    sub.textContent = sharedCount(m.uid) + ' file dibagikan';
+    left.append(n, sub);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'danger';
+    del.textContent = 'Hapus';
+    del.addEventListener('click', () => removeMember(m));
+    row.append(left, del);
+    box.appendChild(row);
+  });
+}
+
+async function removeMember(m) {
+  if (!confirm('Hapus pemodal "' + m.username + '"? Aksesnya ke semua file dicabut.')) return;
+  try {
+    const affected = files.filter((f) => (f.viewers || []).includes(m.uid));
+    for (const f of affected) {
+      f.viewers = f.viewers.filter((u) => u !== m.uid);
+      await cloud.pushFile(f);
+    }
+    await cloud.removeMember(m.uid);
+    members = members.filter((x) => x.uid !== m.uid);
+    render();
+    setMsg('Pemodal "' + m.username + '" dihapus dari daftar.', 'ok');
+  } catch (e) {
+    console.error(e);
+    setMsg(friendly(e), 'err');
+  }
+}
+
+function validUsername(u) {
+  return /^[a-z0-9._-]{3,30}$/.test(u);
+}
+
+$('show').addEventListener('change', (e) => { $('p').type = e.target.checked ? 'text' : 'password'; });
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('u').value.trim().toLowerCase();
+  const pass = $('p').value;
+  setMsg('', '');
+  if (!validUsername(name)) { setMsg('Username 3-30 karakter: huruf kecil, angka, titik, strip, atau garis bawah.', 'err'); return; }
+  if (pass.length < 8) { setMsg('Password minimal 8 karakter.', 'err'); return; }
+  if (members.some((m) => m.username === name)) { setMsg('Username itu sudah ada di daftar.', 'err'); return; }
+
+  const btn = $('go');
+  btn.disabled = true;
+  btn.textContent = 'Tunggu...';
+  try {
+    const m = await cloud.createMember(name, pass);
+    members.push({ uid: m.uid, username: m.username, created: Date.now() });
+    render();
+    $('u').value = '';
+    $('p').value = '';
+    setMsg('Akun "' + m.username + '" dibuat. Beri tahu username dan password-nya ke pemodal.', 'ok');
+  } catch (err) {
+    console.error(err);
+    setMsg(friendly(err), 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Buat akun pemodal';
+  }
+});
+
+$('btnLogout').addEventListener('click', async () => {
+  try { await cloud.logout(); } catch (e) { /* abaikan */ }
+  location.replace('login.html');
+});
+
+(async function boot() {
+  if (!cloud.configured) {
+    showBoot('Firebase belum diatur. Isi file firebase-config.js dulu (lihat panduan).', true);
+    return;
+  }
+  user = await cloud.requireUser();
+  $('who').textContent = cloud.nameOf(user);
+  try {
+    const role = await cloud.getRole();
+    if (role !== 'admin') { location.replace('index.html'); return; }
+    members = await cloud.fetchMembers();
+    files = await cloud.fetchFiles('admin');
+  } catch (e) {
+    console.error(e);
+    showBoot(friendly(e), true);
+    return;
+  }
+  $('boot').hidden = true;
+  render();
+})();
+</script>
+</body>
+</html>

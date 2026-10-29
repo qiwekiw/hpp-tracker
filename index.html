@@ -75,6 +75,34 @@
   .boot[hidden] { display: none; }
   #bootMsg.err { color: var(--red); max-width: 420px; }
 
+  [hidden] { display: none !important; }
+  .navlink.alt { background: var(--panel-alt); border-color: var(--border); color: var(--text); }
+  .navlink.alt:hover { border-color: var(--accent); background: var(--panel-alt); }
+  .meta.shared { margin-top: -4px; }
+  .emptybox { padding: 24px 16px; text-align: center; color: var(--dim); display: grid; gap: 6px; }
+  .emptybox b { color: var(--text); }
+  .dim { color: var(--dim); font-size: 13px; }
+
+  /* kolom Harga dengan awalan Rp */
+  .cell .money { display: flex; align-items: center; border: 1px solid transparent; border-radius: 6px; min-width: 0; }
+  .cell .money:focus-within { background: var(--panel-alt); border-color: var(--accent); }
+  .cell .money .rp { color: var(--dim); font-size: 13px; padding-left: 8px; flex: none; }
+  .cell .money input, .cell .money input:focus { border: 0; background: transparent; text-align: right; min-width: 0; padding-left: 4px; }
+  .cell input[readonly] { cursor: default; }
+
+  /* tampilan pemodal (hanya lihat) */
+  .viewonly .head, .viewonly .row { grid-template-columns: minmax(0,2.4fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.5fr); }
+  .viewonly .head > :last-child { display: none; }
+
+  /* jendela bagikan */
+  .modal { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .sheet { width: 100%; max-width: 400px; max-height: 85vh; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .sheet h2 { font-size: 16px; margin: 0 0 4px; }
+  #shareList { margin: 10px 0 14px; display: grid; gap: 6px; }
+  .opt { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--panel-alt); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+  .opt input { width: 18px; height: 18px; margin: 0; }
+  .btns.end { justify-content: flex-end; }
+
   /* ---- File picker ---- */
   .filebar { padding: 12px; margin-bottom: 12px; }
   .filebar .pick { display: flex; gap: 8px; align-items: center; }
@@ -185,7 +213,13 @@
       font-size: 16px;      /* cegah zoom otomatis di iPhone */
       padding: 11px 10px;
     }
-    .c-banyak input, .c-harga input { text-align: left; }
+    .c-banyak input { text-align: left; }
+    .cell .money { background: var(--panel-alt); border-color: var(--border); }
+    .cell .money .rp { font-size: 15px; padding-left: 10px; }
+    .cell .money input, .cell .money input:focus { font-size: 16px; padding: 11px 10px 11px 4px; text-align: left; background: transparent; border: 0; }
+    .viewonly .row { grid-template-columns: repeat(3, minmax(0,1fr)); grid-template-areas: "nama nama nama" "banyak satuan harga" "total total total"; }
+    .btns.end button { flex: 0 0 auto; }
+
   }
 </style>
 </head>
@@ -198,31 +232,40 @@
       <div class="sub">Masuk sebagai <b id="who">-</b></div>
     </div>
     <div class="topbtns">
+      <a class="navlink alt adminonly" href="pemodal.html" hidden>Pemodal</a>
       <a class="navlink" href="dashboard.html">Dashboard</a>
       <button type="button" id="btnLogout" class="ghost">Keluar</button>
     </div>
   </header>
   <div id="status" class="status" role="status" aria-live="polite"></div>
 
+  <div id="emptyMember" class="card emptybox" hidden>
+    <b>Belum ada HPP yang dibagikan ke akun lu.</b>
+    <div>Hubungi admin untuk dibagikan akses. Halaman ini akan terisi otomatis saat sudah dibagikan.</div>
+  </div>
+
+  <div id="app">
   <div class="card filebar">
     <div class="pick">
       <label for="fileSelect">File aktif</label>
       <select id="fileSelect"></select>
     </div>
     <div class="meta" id="meta"></div>
+    <div class="meta shared adminonly" id="shared" hidden></div>
     <div class="btns">
-      <button id="btnNew">File baru</button>
-      <button id="btnRename">Ubah nama</button>
-      <button id="btnDup">Duplikat</button>
-      <button id="btnDel" class="danger">Hapus file</button>
+      <button id="btnNew" class="adminonly" hidden>File baru</button>
+      <button id="btnRename" class="adminonly" hidden>Ubah nama</button>
+      <button id="btnDup" class="adminonly" hidden>Duplikat</button>
+      <button id="btnShare" class="adminonly" hidden>Bagikan</button>
+      <button id="btnDel" class="danger adminonly" hidden>Hapus file</button>
     </div>
   </div>
 
   <div class="toolbar">
-    <button id="btnAdd" class="primary">+ Tambah barang</button>
+    <button id="btnAdd" class="primary adminonly" hidden>+ Tambah barang</button>
     <button id="btnExport">Export CSV</button>
-    <button id="btnImport">Import CSV</button>
-    <details class="more">
+    <button id="btnImport" class="adminonly" hidden>Import CSV</button>
+    <details class="more adminonly" hidden>
       <summary>Lainnya</summary>
       <div class="btns">
         <button id="btnBackup">Backup semua file</button>
@@ -244,7 +287,7 @@
       <div></div>
     </div>
     <div id="rows"></div>
-    <button class="addrow" id="btnAdd2">+ Tambah barang</button>
+    <button class="addrow adminonly" id="btnAdd2" hidden>+ Tambah barang</button>
   </div>
 
   <div class="grand">
@@ -252,7 +295,20 @@
     <strong id="grand">Rp 0</strong>
   </div>
 
-  <div class="note">Data tersimpan di akun online lu, jadi bisa dibuka dari HP atau komputer mana saja setelah login. Backup berguna sebagai cadangan pribadi.</div>
+  </div>
+  <div class="note">Data tersimpan di akun online, bisa dibuka dari HP atau komputer mana saja setelah login.</div>
+</div>
+
+<div id="shareModal" class="modal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+    <h2 id="shareTitle">Bagikan</h2>
+    <p class="dim">Pemodal yang dicentang bisa melihat file ini (hanya lihat, tidak bisa mengubah).</p>
+    <div id="shareList"></div>
+    <div class="btns end">
+      <button type="button" id="shareCancel">Batal</button>
+      <button type="button" id="shareSave" class="primary">Simpan</button>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -260,6 +316,9 @@ import * as cloud from './hpp-cloud.js';
 
 const $ = (id) => document.getElementById(id);
 let user = null;
+let role = 'member';
+let isAdmin = false;
+let members = [];
 let store = { files: [], currentId: null };
 
 /* ---------- helpers ---------- */
@@ -274,6 +333,26 @@ const hasData = (r) => !!r && ['nama', 'banyak', 'harga'].some((k) => {
   return s !== '' && s !== '0';
 });
 
+/* ---------- format harga: 67000 -> 67.000 (koma = desimal) ---------- */
+function fmtMoney(raw) {
+  raw = String(raw === undefined || raw === null ? '' : raw);
+  if (raw === '') return '';
+  const parts = raw.split('.');
+  const intFmt = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return parts.length > 1 ? intFmt + ',' + parts[1] : intFmt;
+}
+function parseMoney(text) {
+  const t = String(text || '').replace(/[^\d,]/g, '');
+  if (!t) return '';
+  const parts = t.split(',');
+  let i = parts[0].replace(/^0+(?=\d)/, '');
+  if (parts.length > 1) {
+    if (i === '') i = '0';
+    return i + '.' + parts.slice(1).join('').slice(0, 2);
+  }
+  return i;
+}
+
 function normRow(r) {
   r = r || {};
   const s = (v) => (v === undefined || v === null || v === 0 ? '' : String(v));
@@ -282,18 +361,19 @@ function normRow(r) {
 function makeFile(name, rows) {
   const clean = (rows || []).map(normRow);
   const now = Date.now();
-  return { id: uid(), name: name || 'HPP', rows: clean.length ? clean : [blankRow()], created: now, updated: now };
+  return { id: uid(), name: name || 'HPP', rows: clean.length ? clean : [blankRow()], viewers: [], created: now, updated: now };
 }
 function normFile(f) {
   f.rows = (f.rows || []).map(normRow);
   if (!f.rows.length) f.rows = [blankRow()];
+  f.viewers = Array.isArray(f.viewers) ? f.viewers : [];
   f.name = f.name || 'HPP';
   f.updated = f.updated || Date.now();
   f.created = f.created || f.updated;
   return f;
 }
 
-/* ---------- sinkron ke cloud ---------- */
+/* ---------- sinkron ke cloud (hanya admin yang menulis) ---------- */
 const dirty = new Set();
 let saveTimer = null;
 let inflight = 0;
@@ -304,6 +384,7 @@ function setStatus(kind, text) {
   s.textContent = text;
 }
 function markDirty(id) {
+  if (!isAdmin) return;
   dirty.add(id);
   setStatus('pending', 'Menyimpan...');
   clearTimeout(saveTimer);
@@ -365,9 +446,18 @@ function readLegacy() {
   return out;
 }
 
-async function firstLoadFiles() {
-  let files = await cloud.fetchFiles();
+// Hanya admin: kalau belum ada file di struktur baru, pindahkan data dari struktur lama.
+async function adminFirstFiles() {
+  const files = await cloud.fetchFiles(role);
   if (files.length) return files;
+
+  let old = [];
+  try { old = await cloud.fetchLegacyCloudFiles(); } catch (e) { old = []; }
+  if (old.length) {
+    const moved = old.map((f) => normFile({ ...f, viewers: [] }));
+    await Promise.all(moved.map((f) => cloud.pushFile(f)));
+    return moved;
+  }
 
   const flag = 'hpp_migrated_' + user.uid;
   let created = [];
@@ -382,10 +472,11 @@ async function firstLoadFiles() {
 }
 
 async function loadRemote(first) {
-  let files = first ? await firstLoadFiles() : await cloud.fetchFiles();
-  if (!files.length) return false;
+  let files = (first && isAdmin) ? await adminFirstFiles() : await cloud.fetchFiles(role);
   files = files.map(normFile);
+  if (!files.length && isAdmin && !first) return false;   // jangan kosongkan tampilan admin karena hasil aneh
   store.files = files;
+  if (!files.length) { store.currentId = null; return true; }
   let saved = null;
   try { saved = localStorage.getItem('hpp_current_' + user.uid); } catch (e) { /* abaikan */ }
   const keep = cur() ? store.currentId : null;
@@ -394,11 +485,29 @@ async function loadRemote(first) {
   return true;
 }
 
+/* ---------- peran ---------- */
+function applyRole() {
+  document.body.classList.toggle('viewonly', !isAdmin);
+  document.querySelectorAll('.adminonly').forEach((el) => { el.hidden = !isAdmin; });
+  $('who').textContent = cloud.nameOf(user) + (isAdmin ? ' (Admin)' : ' (Pemodal, hanya lihat)');
+  $('status').hidden = !isAdmin;
+}
+function showApp(has) {
+  $('app').hidden = !has;
+  $('emptyMember').hidden = has;
+}
+
 /* ---------- render ---------- */
 function updateMeta() {
   const f = cur();
   const t = new Date(f.updated).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
   $('meta').textContent = f.rows.length + ' baris, terakhir diubah ' + t;
+}
+function updateShared() {
+  const f = cur();
+  if (!f) return;
+  const names = f.viewers.map((u) => (members.find((m) => m.uid === u) || {}).username || '(akun dihapus)');
+  $('shared').textContent = names.length ? 'Dibagikan ke: ' + names.join(', ') : 'Belum dibagikan ke pemodal mana pun.';
 }
 function updateGrand() {
   const sum = cur().rows.reduce((s, r) => s + rowTotal(r), 0);
@@ -427,6 +536,7 @@ function field(row, key, label, type, placeholder, onChange) {
   inp.placeholder = placeholder;
   inp.value = row[key];
   inp.autocomplete = 'off';
+  inp.readOnly = !isAdmin;
   inp.setAttribute('aria-label', label);
   if (type === 'number') {
     inp.inputMode = 'decimal';
@@ -439,6 +549,43 @@ function field(row, key, label, type, placeholder, onChange) {
     onChange();
   });
   cell.append(l, inp);
+  return cell;
+}
+
+function moneyField(row, onChange) {
+  const cell = document.createElement('div');
+  cell.className = 'cell c-harga';
+  const l = document.createElement('span');
+  l.className = 'lbl';
+  l.textContent = 'Harga';
+  const wrap = document.createElement('div');
+  wrap.className = 'money';
+  const rp = document.createElement('span');
+  rp.className = 'rp';
+  rp.textContent = 'Rp';
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.inputMode = 'decimal';
+  inp.placeholder = '0';
+  inp.autocomplete = 'off';
+  inp.readOnly = !isAdmin;
+  inp.setAttribute('aria-label', 'Harga (Rupiah)');
+  inp.value = fmtMoney(row.harga);
+  inp.addEventListener('input', () => {
+    const pos = inp.selectionStart === null ? inp.value.length : inp.selectionStart;
+    const sig = inp.value.slice(0, pos).replace(/[^\d,]/g, '').length;
+    const raw = parseMoney(inp.value);
+    row.harga = raw;
+    const txt = fmtMoney(raw);
+    inp.value = txt;
+    // jaga posisi kursor agar tidak loncat ke ujung saat titik ribuan bertambah
+    let count = 0, np = 0;
+    while (np < txt.length && count < sig) { if (/[\d,]/.test(txt[np])) count++; np++; }
+    try { inp.setSelectionRange(np, np); } catch (e) { /* abaikan */ }
+    onChange();
+  });
+  wrap.append(rp, inp);
+  cell.append(l, wrap);
   return cell;
 }
 
@@ -460,30 +607,32 @@ function buildRow(row) {
     touch();
   };
 
-  const delCell = document.createElement('div');
-  delCell.className = 'cell c-del';
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.textContent = '✕';
-  del.title = 'Hapus baris';
-  del.setAttribute('aria-label', 'Hapus baris');
-  del.addEventListener('click', () => {
-    const f = cur();
-    f.rows.splice(f.rows.indexOf(row), 1);
-    if (!f.rows.length) f.rows.push(blankRow());
-    touch();
-    renderRows();
-  });
-  delCell.appendChild(del);
-
   el.append(
     field(row, 'nama', 'Nama barang', 'text', 'Nama barang', refresh),
     field(row, 'banyak', 'Banyak', 'number', '0', refresh),
     field(row, 'satuan', 'Satuan', 'text', 'pcs / kg / m', refresh),
-    field(row, 'harga', 'Harga', 'number', '0', refresh),
-    totalCell,
-    delCell
+    moneyField(row, refresh),
+    totalCell
   );
+
+  if (isAdmin) {
+    const delCell = document.createElement('div');
+    delCell.className = 'cell c-del';
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '✕';
+    del.title = 'Hapus baris';
+    del.setAttribute('aria-label', 'Hapus baris');
+    del.addEventListener('click', () => {
+      const f = cur();
+      f.rows.splice(f.rows.indexOf(row), 1);
+      if (!f.rows.length) f.rows.push(blankRow());
+      touch();
+      renderRows();
+    });
+    delCell.appendChild(del);
+    el.appendChild(delCell);
+  }
   totalVal.textContent = rupiah(rowTotal(row));
   return el;
 }
@@ -506,6 +655,7 @@ function renderRows(focusLast) {
 function renderAll() {
   renderFileSelect();
   renderRows();
+  updateShared();
 }
 
 /* ---------- aksi baris ---------- */
@@ -546,10 +696,10 @@ function renameFile() {
 }
 function dupFile() {
   const src = cur();
-  addFileObj(makeFile(src.name + ' (salinan)', JSON.parse(JSON.stringify(src.rows))));
+  addFileObj(makeFile(src.name + ' (salinan)', JSON.parse(JSON.stringify(src.rows))));   // salinan tidak ikut dibagikan
 }
 async function deleteFile() {
-  if (!confirm('Hapus file "' + cur().name + '"? Tidak bisa dibatalkan.')) return;
+  if (!confirm('Hapus file "' + cur().name + '"? Pemodal yang diberi akses juga tidak bisa melihatnya lagi. Tidak bisa dibatalkan.')) return;
   const id = store.currentId;
   try {
     await cloud.removeFile(id);
@@ -566,6 +716,48 @@ async function deleteFile() {
   }
   setCurrent(store.files[0].id);
   renderAll();
+}
+
+/* ---------- bagikan ke pemodal ---------- */
+function openShare() {
+  const f = cur();
+  const box = $('shareList');
+  box.innerHTML = '';
+  $('shareTitle').textContent = 'Bagikan "' + f.name + '"';
+  if (!members.length) {
+    const p = document.createElement('p');
+    p.className = 'dim';
+    p.append('Belum ada pemodal. Tambahkan dulu di halaman ');
+    const a = document.createElement('a');
+    a.href = 'pemodal.html';
+    a.textContent = 'Pemodal';
+    p.append(a, '.');
+    box.appendChild(p);
+    $('shareSave').hidden = true;
+  } else {
+    $('shareSave').hidden = false;
+    members.forEach((m) => {
+      const label = document.createElement('label');
+      label.className = 'opt';
+      const c = document.createElement('input');
+      c.type = 'checkbox';
+      c.value = m.uid;
+      c.checked = f.viewers.includes(m.uid);
+      const s = document.createElement('span');
+      s.textContent = m.username;
+      label.append(c, s);
+      box.appendChild(label);
+    });
+  }
+  $('shareModal').hidden = false;
+}
+function closeShare() { $('shareModal').hidden = true; }
+function saveShare() {
+  const f = cur();
+  f.viewers = [...$('shareList').querySelectorAll('input:checked')].map((c) => c.value);
+  touch();
+  updateShared();
+  closeShare();
 }
 
 /* ---------- CSV ---------- */
@@ -642,7 +834,8 @@ function importCSV(file) {
 /* ---------- Backup / Restore ---------- */
 function backupAll() {
   const d = new Date().toISOString().slice(0, 10);
-  download('hpp-backup-' + d + '.json', JSON.stringify({ app: 'hpp-tracker', version: 3, files: store.files }, null, 2), 'application/json');
+  const files = store.files.map((f) => ({ name: f.name, rows: f.rows }));
+  download('hpp-backup-' + d + '.json', JSON.stringify({ app: 'hpp-tracker', version: 4, files }, null, 2), 'application/json');
 }
 function restoreBackup(file) {
   const reader = new FileReader();
@@ -677,7 +870,7 @@ function bootError(e) {
   console.error(e);
   const code = (e && e.code) || '';
   if (code === 'permission-denied') {
-    showBoot('Akses ditolak oleh Firestore. Aturan (Rules) belum dipasang atau salah. Ikuti langkah Rules di panduan.', true);
+    showBoot('Akses ditolak oleh Firestore. Aturan (Rules) belum diperbarui atau salah. Ikuti langkah Rules di panduan.', true);
   } else if (code === 'unavailable' || /network|offline/i.test((e && e.message) || '')) {
     showBoot('Tidak bisa terhubung ke server. Cek internet lalu muat ulang halaman.', true);
   } else {
@@ -698,16 +891,21 @@ async function boot() {
     return;
   }
   user = await cloud.requireUser();
-  $('who').textContent = cloud.nameOf(user);
   try {
+    role = await cloud.getRole();
+    isAdmin = role === 'admin';
+    applyRole();
+    if (isAdmin) members = await cloud.fetchMembers();
     await loadRemote(true);
   } catch (e) {
     bootError(e);
     return;
   }
   hideBoot();
+  if (!store.files.length) { showApp(false); return; }
+  showApp(true);
   renderAll();
-  setStatus('ok', 'Tersimpan di cloud');
+  if (isAdmin) setStatus('ok', 'Tersimpan di cloud');
 }
 
 /* ---------- wiring ---------- */
@@ -716,9 +914,14 @@ $('btnNew').addEventListener('click', newFile);
 $('btnRename').addEventListener('click', renameFile);
 $('btnDup').addEventListener('click', dupFile);
 $('btnDel').addEventListener('click', deleteFile);
+$('btnShare').addEventListener('click', openShare);
+$('shareSave').addEventListener('click', saveShare);
+$('shareCancel').addEventListener('click', closeShare);
+$('shareModal').addEventListener('click', (e) => { if (e.target === $('shareModal')) closeShare(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('shareModal').hidden) closeShare(); });
 $('btnAdd').addEventListener('click', addRow);
 $('btnAdd2').addEventListener('click', addRow);
-$('btnExport').addEventListener('click', exportCSV);
+$('btnExport').addEventListener('click', () => { if (cur()) exportCSV(); });
 $('btnImport').addEventListener('click', () => $('csvFile').click());
 $('btnBackup').addEventListener('click', backupAll);
 $('btnRestore').addEventListener('click', () => $('jsonFile').click());
@@ -733,14 +936,18 @@ $('jsonFile').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-// simpan segera saat tab disembunyikan; segarkan data dari cloud saat tab dibuka lagi
+// simpan segera saat tab disembunyikan; segarkan dari cloud saat tab dibuka lagi
 document.addEventListener('visibilitychange', async () => {
   if (!user) return;
   if (document.hidden) { if (dirty.size) flush(); return; }
   if (dirty.size || inflight) return;
   try {
-    if (await loadRemote(false)) renderAll();
-  } catch (e) { /* abaikan, data lokal tetap tampil */ }
+    if (isAdmin) members = await cloud.fetchMembers();
+    if (await loadRemote(false)) {
+      showApp(store.files.length > 0);
+      if (store.files.length) renderAll();
+    }
+  } catch (e) { /* abaikan, data lama tetap tampil */ }
 });
 window.addEventListener('beforeunload', (e) => {
   if (dirty.size || inflight) { e.preventDefault(); e.returnValue = ''; }

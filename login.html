@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0f1115">
 <title>Masuk - Data HPP</title>
 <style>
-  :root { --bg:#0f1115; --panel:#171a21; --panel-alt:#1e222b; --border:#2a2f3a; --text:#e8e9ec; --dim:#9aa0ab; --accent:#4f8cff; --red:#ff5d6c; --green:#35c98f; }
+  :root { --bg:#0f1115; --panel:#171a21; --panel-alt:#1e222b; --border:#2a2f3a; --text:#e8e9ec; --dim:#9aa0ab; --accent:#4f8cff; --red:#ff5d6c; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; min-height: 100%; }
   body {
@@ -33,7 +33,6 @@
   }
   button.go:hover { background: #3f7ae0; }
   button.go:disabled { opacity: .6; cursor: default; }
-  button.link { background: none; border: 0; color: var(--accent); font: inherit; font-size: 14px; cursor: pointer; padding: 10px 0 0; width: 100%; }
   .msg { min-height: 20px; font-size: 13px; color: var(--red); margin: -2px 0 12px; }
   .banner { background: #3a2f12; border: 1px solid #8a6d1d; color: #ffe9a8; border-radius: 8px; padding: 12px; font-size: 13px; margin-bottom: 14px; }
   .note { color: var(--dim); font-size: 12px; margin-top: 14px; text-align: center; }
@@ -43,7 +42,7 @@
 <body>
 <div class="box">
   <h1>Data HPP</h1>
-  <div class="sub" id="sub">Masuk untuk membuka data modal lu.</div>
+  <div class="sub">Masuk untuk membuka data modal.</div>
 
   <div class="card">
     <div id="setup" class="banner" hidden>Firebase belum diatur. Isi file <b>firebase-config.js</b> dulu (lihat panduan), lalu muat ulang halaman ini.</div>
@@ -55,36 +54,18 @@
       <label class="f" for="p">Password</label>
       <input type="password" id="p" name="password" autocomplete="current-password" required>
 
-      <div id="confirmWrap" hidden>
-        <label class="f" for="p2">Ulangi password</label>
-        <input type="password" id="p2" name="password2" autocomplete="new-password">
-      </div>
-
       <label class="chk"><input type="checkbox" id="show"> Tampilkan password</label>
       <div class="msg" id="msg" role="alert" aria-live="assertive"></div>
       <button type="submit" class="go" id="go">Masuk</button>
     </form>
-    <button type="button" class="link" id="toggle" hidden>Belum punya akun? Buat akun</button>
   </div>
-  <div class="note">Data hanya bisa dibuka setelah login.</div>
+  <div class="note">Akun dibuat oleh admin. Hubungi admin kalau belum punya akun.</div>
 </div>
 
 <script type="module">
 import * as cloud from './hpp-cloud.js';
 
 const $ = (id) => document.getElementById(id);
-let mode = 'login';
-
-function setMode(m) {
-  mode = m;
-  const reg = m === 'register';
-  $('confirmWrap').hidden = !reg;
-  $('p').autocomplete = reg ? 'new-password' : 'current-password';
-  $('go').textContent = reg ? 'Buat akun' : 'Masuk';
-  $('toggle').textContent = reg ? 'Sudah punya akun? Masuk' : 'Belum punya akun? Buat akun';
-  $('sub').textContent = reg ? 'Buat akun pertama lu. Username bebas, password minimal 8 karakter.' : 'Masuk untuk membuka data modal lu.';
-  $('msg').textContent = '';
-}
 
 function friendly(e) {
   const c = (e && e.code) || '';
@@ -92,23 +73,13 @@ function friendly(e) {
     'auth/invalid-credential': 'Username atau password salah.',
     'auth/wrong-password': 'Username atau password salah.',
     'auth/user-not-found': 'Username atau password salah.',
-    'auth/invalid-email': 'Username tidak valid. Pakai huruf kecil, angka, titik, strip, atau garis bawah.',
-    'auth/email-already-in-use': 'Username itu sudah dipakai. Coba username lain.',
-    'auth/weak-password': 'Password terlalu lemah. Pakai minimal 8 karakter.',
+    'auth/invalid-email': 'Username tidak valid.',
     'auth/too-many-requests': 'Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi.',
     'auth/network-request-failed': 'Tidak ada koneksi internet. Coba lagi.',
     'auth/operation-not-allowed': 'Login Email/Password belum diaktifkan di Firebase (Authentication > Sign-in method).',
-    'auth/admin-restricted-operation': 'Pembuatan akun baru dimatikan. Gunakan akun yang sudah ada.',
-    'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'API key di firebase-config.js tidak valid.',
     'auth/invalid-api-key': 'API key di firebase-config.js tidak valid.'
   };
   return map[c] || ('Gagal: ' + (c || (e && e.message) || 'kesalahan tidak dikenal'));
-}
-
-function validUsername(u) {
-  u = u.trim().toLowerCase();
-  if (u.includes('@')) return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u);
-  return /^[a-z0-9._-]{3,30}$/.test(u);
 }
 
 async function init() {
@@ -117,44 +88,32 @@ async function init() {
     $('go').disabled = true;
     return;
   }
-  if (cloud.allowRegister) $('toggle').hidden = false;
   const u = await cloud.ready;
-  if (u) { location.replace('index.html'); return; }
+  if (u) location.replace('index.html');
 }
 
 $('show').addEventListener('change', (e) => {
-  const t = e.target.checked ? 'text' : 'password';
-  $('p').type = t;
-  $('p2').type = t;
+  $('p').type = e.target.checked ? 'text' : 'password';
 });
-$('toggle').addEventListener('click', () => setMode(mode === 'login' ? 'register' : 'login'));
 
 $('form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const user = $('u').value;
-  const pass = $('p').value;
   const msg = $('msg');
   msg.textContent = '';
-
-  if (!validUsername(user)) { msg.textContent = 'Username 3-30 karakter: huruf kecil, angka, titik, strip, atau garis bawah.'; return; }
-  if (!pass) { msg.textContent = 'Password wajib diisi.'; return; }
-  if (mode === 'register') {
-    if (pass.length < 8) { msg.textContent = 'Password minimal 8 karakter.'; return; }
-    if (pass !== $('p2').value) { msg.textContent = 'Ulangi password tidak sama.'; return; }
-  }
+  const user = $('u').value.trim();
+  const pass = $('p').value;
+  if (!user || !pass) { msg.textContent = 'Username dan password wajib diisi.'; return; }
 
   const btn = $('go');
   btn.disabled = true;
-  const label = btn.textContent;
   btn.textContent = 'Tunggu...';
   try {
-    if (mode === 'register') await cloud.register(user, pass);
-    else await cloud.login(user, pass);
+    await cloud.login(user, pass);
     location.replace('index.html');
   } catch (err) {
     msg.textContent = friendly(err);
     btn.disabled = false;
-    btn.textContent = label;
+    btn.textContent = 'Masuk';
   }
 });
 
